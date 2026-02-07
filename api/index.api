@@ -63,3 +63,6 @@ def create_meeting(message):
 
 def handler(request):
     return app(request)
+# В самом конце файла api/index.py
+# Это нужно, чтобы Vercel "подцепил" Flask
+app = app
