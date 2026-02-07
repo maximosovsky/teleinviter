@@ -1,0 +1,75 @@
+<details>
+<summary>
+import telebot
+from datetime import datetime, timedelta, timezone
+import urllib.parse
+import os
+from flask import Flask, request
+
+# Берем токен из настроек Vercel
+API_TOKEN = os.getenv('BOT_TOKEN')
+bot = telebot.TeleBot(API_TOKEN, threaded=False)
+
+app = Flask(__name__)
+
+@app.route('/', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    else:
+        return 'OK', 200
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, 
+        "<b>Zonely на Vercel 🚀</b>\n\n"
+        "Пришли данные встречи:\n"
+        "<code>Название, 08.02.2026, 19:00, ссылка</code>", 
+        parse_mode='HTML')
+
+@bot.message_handler(func=lambda m: True)
+def create_meeting(message):
+    try:
+        parts = [p.strip() for p in message.text.split(',')]
+        title, date_val, time_val, zoom = parts[0], parts[1], parts[2], parts[3]
+
+        naive_dt = datetime.strptime(f"{date_val} {time_val}", "%d.%m.%Y %H:%M")
+        ist_tz = timezone(timedelta(hours=3))
+        meeting_dt_ist = naive_dt.replace(tzinfo=ist_tz)
+        
+        h, m = meeting_dt_ist.hour, meeting_dt_ist.minute
+        def calc_city(offset):
+            nh = (h + offset + 24) % 24
+            return f"{nh:02d}:{m:02d}"
+        cities = f"{calc_city(-1)} Riga / {calc_city(-2)} Rome / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
+
+        m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
+        m_utc_end = m_utc_start + timedelta(hours=1)
+        iso_start = m_utc_start.strftime("%Y%m%dT%H%M%SZ")
+        iso_end = m_utc_end.strftime("%Y%m%dT%H%M%SZ")
+        
+        gcal = "https://www.google.com/calendar/render?" + urllib.parse.urlencode({
+            "action": "TEMPLATE", "text": title, "dates": f"{iso_start}/{iso_end}",
+            "details": f"Zoom: {zoom}", "ctz": "UTC"
+        })
+
+        months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+        days = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
+        res = (f"<b>{title}</b>\n"
+               f"⚡️ <b>{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]} {meeting_dt_ist.year}</b> в <b>{days[meeting_dt_ist.weekday()]}</b> в <b>{time_val} Ist</b>\n"
+               f"<code>{cities}</code>\n\n"
+               f"<b>ZOOM</b> — {zoom}\n\n"
+               f"📲 <a href='{gcal}'>Добавить в календарь</a>")
+
+        bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
+    except:
+        bot.send_message(message.chat.id, "❌ Ошибка формата!")
+
+# Нужно для Vercel
+def handler(request):
+    return app(request)
+</summary>
+</details>
