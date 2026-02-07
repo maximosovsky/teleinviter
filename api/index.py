@@ -41,7 +41,7 @@ def create_meeting(message):
         def calc_city(offset):
             nh = (h + offset + 24) % 24
             return f"{nh:02d}:{m:02d}"
-        cities = f"{calc_city(-1)} Riga, Tel-Aviv / {calc_city(-2)} Rome / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
+        cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
 
         # Ссылка в календарь на 1 час
         m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
@@ -65,4 +65,5 @@ def create_meeting(message):
 
 # Экспорт приложения для Vercel
 app = app
+
 
