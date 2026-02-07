@@ -1,34 +1,30 @@
-<details>
-<summary>
 import telebot
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import os
 from flask import Flask, request
 
-# Берем токен из настроек Vercel
 API_TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 
 app = Flask(__name__)
 
-@app.route('/', methods=['POST'])
+# Теперь разрешаем и GET, и POST
+@app.route('/', methods=['GET', 'POST'])
 def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return ''
+    if request.method == 'POST':
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+            return 'OK', 200
     else:
-        return 'OK', 200
+        # Если открыть в браузере (GET), увидишь это:
+        return '<h1>Zonely Bot is Running!</h1>', 200
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, 
-        "<b>Zonely на Vercel 🚀</b>\n\n"
-        "Пришли данные встречи:\n"
-        "<code>Название, 08.02.2026, 19:00, ссылка</code>", 
-        parse_mode='HTML')
+    bot.send_message(message.chat.id, "Бот на Vercel готов! Пришли данные встречи.")
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
@@ -58,18 +54,12 @@ def create_meeting(message):
 
         months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
         days = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
-        res = (f"<b>{title}</b>\n"
-               f"⚡️ <b>{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]} {meeting_dt_ist.year}</b> в <b>{days[meeting_dt_ist.weekday()]}</b> в <b>{time_val} Ist</b>\n"
-               f"<code>{cities}</code>\n\n"
-               f"<b>ZOOM</b> — {zoom}\n\n"
-               f"📲 <a href='{gcal}'>Добавить в календарь</a>")
+        res = (f"<b>{title}</b>\n⚡️ <b>{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]}</b> в <b>{days[meeting_dt_ist.weekday()]}</b> в <b>{time_val} Ist</b>\n"
+               f"<code>{cities}</code>\n\n<b>ZOOM</b> — {zoom}\n\n📲 <a href='{gcal}'>Добавить в календарь</a>")
 
         bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
     except:
-        bot.send_message(message.chat.id, "❌ Ошибка формата!")
+        bot.send_message(message.chat.id, "Ошибка формата!")
 
-# Нужно для Vercel
 def handler(request):
     return app(request)
-</summary>
-</details>
