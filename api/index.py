@@ -24,13 +24,13 @@ def webhook():
         except Exception as e:
             print(f"Error processing update: {e}")
             return 'Error', 500
-    else:
-        # Красивая страница для браузера с иконкой
+else:
         return '''
         <html>
             <head>
                 <title>InviterLink Bot</title>
-                <link rel="icon" href="/favicon.ico?v=2" type="image/x-icon">
+                <!-- Указываем на новый файл logo.png и добавляем время, чтобы сбросить кеш -->
+                <link rel="icon" href="/logo.png?v=3" type="image/png">
                 <style>
                     body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
                     .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
@@ -134,3 +134,4 @@ def create_meeting(message):
 
 # Экспорт для Vercel
 app = app
+
