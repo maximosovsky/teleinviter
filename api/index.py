@@ -32,7 +32,7 @@ def webhook():
                 <title>InviterLink Bot</title>
                 <link rel="icon" href="/favicon.ico?v=2" type="image/x-icon">
                 <style>
-                    body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
+                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
                     .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
                     h1 { color: #0088cc; margin: 0; font-size: 24px; }
                     p { color: #666; margin-top: 10px; font-size: 16px; }
@@ -90,10 +90,10 @@ def create_meeting(message):
             nh = (h + offset + 24) % 24
             return f"{nh:02d}:{m:02d}"
             
-        # Обновленный список городов
+        # Твой обновленный список городов
         cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
 
-        # Ссылка в календарь
+        # Ссылка в календарь (1 час)
         m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
         iso_start = m_utc_start.strftime("%Y%m%dT%H%M%SZ")
         iso_end = (m_utc_start + timedelta(hours=1)).strftime("%Y%m%dT%H%M%SZ")
@@ -117,7 +117,6 @@ def create_meeting(message):
             delay = int((reminder_time - now_ist).total_seconds())
 
             if delay > 0:
-                # Определяем URL динамически (поддерживает любой домен Vercel)
                 target_url = f"https://{request.host}/reminder"
                 headers = {
                     "Authorization": f"Bearer {QSTASH_TOKEN}",
@@ -133,7 +132,5 @@ def create_meeting(message):
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата!")
 
-# Важно для Vercel
+# Экспорт для Vercel
 app = app
-
-
