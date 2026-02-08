@@ -103,3 +103,17 @@ def create_meeting(message):
         bot.send_message(message.chat.id, "❌ Ошибка формата!")
 
 app = app
+
+# В блоке, где обрабатывается GET запрос (самый конец функции webhook):
+else:
+    return '''
+    <html>
+        <head>
+            <link rel="icon" href="https://teleinviter.vercel.app/favicon.ico" type="image/x-icon">
+            <title>InviterLink Bot</title>
+        </head>
+        <body>
+            <h1>InviterLink Bot is Running!</h1>
+        </body>
+    </html>
+    ''', 200
