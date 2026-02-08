@@ -25,7 +25,6 @@ def webhook():
             print(f"Error processing update: {e}")
             return 'Error', 500
     else:
-        else:
         # Красивая страница для браузера с иконкой
         return '''
         <html>
@@ -136,4 +135,5 @@ def create_meeting(message):
 
 # Важно для Vercel
 app = app
+
 
