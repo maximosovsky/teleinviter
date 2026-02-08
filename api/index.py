@@ -25,16 +25,18 @@ def webhook():
             print(f"Error processing update: {e}")
             return 'Error', 500
     else:
-        # Блок GET теперь ВНУТРИ функции webhook с правильным отступом
+        else:
+        # Красивая страница для браузера с иконкой
         return '''
         <html>
             <head>
-                <link rel="icon" href="https://teleinviter.vercel.app/favicon.ico" type="image/x-icon">
                 <title>InviterLink Bot</title>
+                <link rel="icon" href="/favicon.ico?v=2" type="image/x-icon">
                 <style>
-                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
+                    body { font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
                     .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
-                    h1 { color: #0088cc; margin: 0; }
+                    h1 { color: #0088cc; margin: 0; font-size: 24px; }
+                    p { color: #666; margin-top: 10px; font-size: 16px; }
                 </style>
             </head>
             <body>
@@ -134,3 +136,4 @@ def create_meeting(message):
 
 # Важно для Vercel
 app = app
+
