@@ -24,12 +24,12 @@ def webhook():
         except Exception as e:
             print(f"Error processing update: {e}")
             return 'Error', 500
-else:
+    else:
+        # ПРАВИЛЬНЫЙ БЛОК ДЛЯ ОТОБРАЖЕНИЯ СТРАНИЦЫ В БРАУЗЕРЕ
         return '''
         <html>
             <head>
                 <title>InviterLink Bot</title>
-                <!-- Указываем на новый файл logo.png и добавляем время, чтобы сбросить кеш -->
                 <link rel="icon" href="/logo.png?v=3" type="image/png">
                 <style>
                     body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
@@ -47,7 +47,7 @@ else:
         </html>
         ''', 200
 
-# Вход для будильника
+# Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
     try:
@@ -90,7 +90,6 @@ def create_meeting(message):
             nh = (h + offset + 24) % 24
             return f"{nh:02d}:{m:02d}"
             
-        # Твой обновленный список городов
         cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
 
         # Ссылка в календарь (1 час)
@@ -134,4 +133,3 @@ def create_meeting(message):
 
 # Экспорт для Vercel
 app = app
-
