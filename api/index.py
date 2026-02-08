@@ -9,7 +9,6 @@ from flask import Flask, request
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
 QSTASH_TOKEN = os.getenv('QSTASH_TOKEN')
-VERCEL_URL = f"https://{os.getenv('VERCEL_URL')}" # Авто-определение твоего адреса
 
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
@@ -23,13 +22,12 @@ def webhook():
         return 'OK', 200
     return '<h1>Zonely Bot is Running!</h1>', 200
 
-# СЕКРЕТНЫЙ ВХОД ДЛЯ НАПОМИНАНИЯ
+# Вход для будильника
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
     data = request.json
     chat_id = data.get('chat_id')
     zoom = data.get('zoom')
-    
     bot.send_message(chat_id, 
         f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{zoom}", 
         parse_mode='HTML', disable_web_page_preview=True)
@@ -37,20 +35,35 @@ def reminder_trigger():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "Бот готов! Пришли: Тема, Дата, Время Ist, Ссылка")
+    bot.send_message(message.chat.id, "Бот готов! Пришли: <code>Тема, Дата, Время Ist, Ссылка</code>", parse_mode='HTML')
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
     try:
         parts = [p.strip() for p in message.text.split(',')]
-        title, date_val, time_val, zoom = parts[0], parts[1], parts[2], parts[3]
+        if len(parts) < 4: raise ValueError
+        title, date_val, time_val, zoom = parts
 
+        # Логика времени
         naive_dt = datetime.strptime(f"{date_val} {time_val}", "%d.%m.%Y %H:%M")
         ist_tz = timezone(timedelta(hours=3))
         meeting_dt_ist = naive_dt.replace(tzinfo=ist_tz)
         now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
 
-        # Ссылка в календарь
+        # Форматирование даты и дня недели
+        months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+        days_short = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
+        date_text = f"{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]} {meeting_dt_ist.year}"
+        day_name = days_short[meeting_dt_ist.weekday()]
+
+        # Расчет городов
+        h, m = meeting_dt_ist.hour, meeting_dt_ist.minute
+        def calc_city(offset):
+            nh = (h + offset + 24) % 24
+            return f"{nh:02d}:{m:02d}"
+        cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek/ {calc_city(5)} Иркутск / {calc_city(-11)} Los Angeles"
+
+        # Ссылка в календарь (1 час)
         m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
         iso_start = m_utc_start.strftime("%Y%m%dT%H%M%SZ")
         iso_end = (m_utc_start + timedelta(hours=1)).strftime("%Y%m%dT%H%M%SZ")
@@ -59,19 +72,22 @@ def create_meeting(message):
             "details": f"Zoom: {zoom}", "ctz": "UTC"
         })
 
-        # Ответ в Телеграм
-        res = (f"<b>{title}</b>\n⚡️ {meeting_dt_ist.day}.{meeting_dt_ist.month} в {time_val} Ist\n\n"
-               f"<b>ZOOM</b> — {zoom}\n\n📲 <a href='{gcal}'>Добавить в календарь</a>")
+        # Сборка красивого сообщения
+        res = (f"<b>{title}</b>\n"
+               f"⚡️ <b>{date_text}</b> в <b>{day_name}</b> в <b>{time_val} Ist</b>\n"
+               f"<code>{cities}</code>\n\n"
+               f"<b>ZOOM</b> — {zoom}\n\n"
+               f"📲 <a href='{gcal}'>Добавить в календарь</a>")
+
         bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
 
-        # СТАВИМ БУДИЛЬНИК ЧЕРЕЗ QSTASH
+        # Будильник QStash
         if QSTASH_TOKEN:
             reminder_time = meeting_dt_ist - timedelta(minutes=45)
             delay = int((reminder_time - now_ist).total_seconds())
 
             if delay > 0:
-                # Отправляем запрос на отложенный вызов нашего же бота
-                target_url = f"{request.url_root}reminder"
+                target_url = f"{request.url_root.rstrip('/')}/reminder"
                 headers = {
                     "Authorization": f"Bearer {QSTASH_TOKEN}",
                     "Content-Type": "application/json",
