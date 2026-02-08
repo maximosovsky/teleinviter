@@ -16,21 +16,48 @@ app = Flask(__name__)
 @app.route('/', methods=['GET', 'POST'])
 def webhook():
     if request.method == 'POST':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return 'OK', 200
-    return '<h1>Zonely Bot is Running!</h1>', 200
+        try:
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+            return 'OK', 200
+        except Exception as e:
+            print(f"Error processing update: {e}")
+            return 'Error', 500
+    else:
+        # Блок GET теперь ВНУТРИ функции webhook с правильным отступом
+        return '''
+        <html>
+            <head>
+                <link rel="icon" href="https://teleinviter.vercel.app/favicon.ico" type="image/x-icon">
+                <title>InviterLink Bot</title>
+                <style>
+                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
+                    .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+                    h1 { color: #0088cc; margin: 0; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>🚀 InviterLink Bot is Running!</h1>
+                    <p>Бот активен и готов к работе в Telegram.</p>
+                </div>
+            </body>
+        </html>
+        ''', 200
 
 # Вход для будильника
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
-    data = request.json
-    chat_id = data.get('chat_id')
-    zoom = data.get('zoom')
-    bot.send_message(chat_id, 
-        f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{zoom}", 
-        parse_mode='HTML', disable_web_page_preview=True)
+    try:
+        data = request.json
+        chat_id = data.get('chat_id')
+        zoom = data.get('zoom')
+        bot.send_message(chat_id, 
+            f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{zoom}", 
+            parse_mode='HTML', disable_web_page_preview=True)
+    except Exception as e:
+        print(f"Reminder error: {e}")
     return 'OK', 200
 
 @bot.message_handler(commands=['start'])
@@ -50,7 +77,7 @@ def create_meeting(message):
         meeting_dt_ist = naive_dt.replace(tzinfo=ist_tz)
         now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
 
-        # Форматирование даты и дня недели
+        # Форматирование
         months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
         days_short = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
         date_text = f"{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]} {meeting_dt_ist.year}"
@@ -61,9 +88,11 @@ def create_meeting(message):
         def calc_city(offset):
             nh = (h + offset + 24) % 24
             return f"{nh:02d}:{m:02d}"
-        cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek/ {calc_city(5)} Иркутск / {calc_city(-11)} Los Angeles"
+            
+        # Обновленный список городов
+        cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek / {calc_city(5)} Иркутск / {calc_city(-11)} LA"
 
-        # Ссылка в календарь (1 час)
+        # Ссылка в календарь
         m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
         iso_start = m_utc_start.strftime("%Y%m%dT%H%M%SZ")
         iso_end = (m_utc_start + timedelta(hours=1)).strftime("%Y%m%dT%H%M%SZ")
@@ -72,7 +101,7 @@ def create_meeting(message):
             "details": f"Zoom: {zoom}", "ctz": "UTC"
         })
 
-        # Сборка красивого сообщения
+        # Ответ в Телеграм
         res = (f"<b>{title}</b>\n"
                f"⚡️ <b>{date_text}</b> в <b>{day_name}</b> в <b>{time_val} Ist</b>\n"
                f"<code>{cities}</code>\n\n"
@@ -87,7 +116,8 @@ def create_meeting(message):
             delay = int((reminder_time - now_ist).total_seconds())
 
             if delay > 0:
-                target_url = f"{request.url_root.rstrip('/')}/reminder"
+                # Определяем URL динамически (поддерживает любой домен Vercel)
+                target_url = f"https://{request.host}/reminder"
                 headers = {
                     "Authorization": f"Bearer {QSTASH_TOKEN}",
                     "Content-Type": "application/json",
@@ -95,25 +125,12 @@ def create_meeting(message):
                 }
                 payload = {"chat_id": message.chat.id, "zoom": zoom}
                 requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
-                              headers=headers, data=json.dumps(payload))
+                              headers=headers, data=json.dumps(payload), timeout=5)
                 
                 bot.send_message(message.chat.id, f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist")
 
-    except Exception as e:
+    except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата!")
 
+# Важно для Vercel
 app = app
-
-# В блоке, где обрабатывается GET запрос (самый конец функции webhook):
-else:
-    return '''
-    <html>
-        <head>
-            <link rel="icon" href="https://teleinviter.vercel.app/favicon.ico" type="image/x-icon">
-            <title>InviterLink Bot</title>
-        </head>
-        <body>
-            <h1>InviterLink Bot is Running!</h1>
-        </body>
-    </html>
-    ''', 200
