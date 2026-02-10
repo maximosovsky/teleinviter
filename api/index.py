@@ -110,23 +110,29 @@ def create_meeting(message):
 
         bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
 
-        # Будильник QStash
+        # Будильник QStash (тест: 5 мин + 40 сек)
         if QSTASH_TOKEN:
-            reminder_time = meeting_dt_ist - timedelta(minutes=45)
-            delay = int((reminder_time - now_ist).total_seconds())
+            target_url = f"https://{request.host}/reminder"
+            payload = {"chat_id": message.chat.id, "zoom": zoom}
+            reminders_set = []
 
-            if delay > 0:
-                target_url = f"https://{request.host}/reminder"
-                headers = {
-                    "Authorization": f"Bearer {QSTASH_TOKEN}",
-                    "Content-Type": "application/json",
-                    "Upstash-Delay": f"{delay}s"
-                }
-                payload = {"chat_id": message.chat.id, "zoom": zoom}
-                requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
-                              headers=headers, data=json.dumps(payload), timeout=5)
-                
-                bot.send_message(message.chat.id, f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist")
+            for label, delta in [("5 мин", timedelta(minutes=5)), ("40 сек", timedelta(seconds=40))]:
+                reminder_time = meeting_dt_ist - delta
+                delay = int((reminder_time - now_ist).total_seconds())
+
+                if delay > 0:
+                    headers = {
+                        "Authorization": f"Bearer {QSTASH_TOKEN}",
+                        "Content-Type": "application/json",
+                        "Upstash-Delay": f"{delay}s"
+                    }
+                    resp = requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
+                                  headers=headers, data=json.dumps(payload), timeout=5)
+                    reminders_set.append(f"{label} до ({reminder_time.strftime('%H:%M:%S')} Ist, delay={delay}s, status={resp.status_code})")
+                else:
+                    reminders_set.append(f"{label} — пропущено (delay={delay}s)")
+
+            bot.send_message(message.chat.id, "🔔 " + " | ".join(reminders_set))
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата!")
