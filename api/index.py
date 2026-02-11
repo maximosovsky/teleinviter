@@ -218,22 +218,28 @@ def create_meeting(message):
                     if target_username:
                         payload["target_username"] = target_username
                     
-                    from qstash import QStash as QStashClient
-                    qstash = QStashClient(QSTASH_TOKEN)
-                    try:
-                        res = qstash.message.publish_json(
-                            url=target_url,
-                            body=payload,
-                            delay=f"{delay}s",
-                        )
-                        print(f"QStash scheduled: {res.message_id}")
+                    import httpx
+                    raw_path = f"/v2/publish/{target_url}".encode("ascii")
+                    url = httpx.URL("https://qstash.upstash.io").copy_with(raw_path=raw_path)
+                    qstash_resp = httpx.post(
+                        url,
+                        headers={
+                            "Authorization": f"Bearer {QSTASH_TOKEN}",
+                            "Content-Type": "application/json",
+                            "Upstash-Delay": f"{delay}s",
+                        },
+                        content=json.dumps(payload),
+                        timeout=10,
+                    )
+                    print(f"QStash response: {qstash_resp.status_code} {qstash_resp.text}")
+                    
+                    if qstash_resp.is_success:
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
-                    except Exception as qe:
-                        print(f"QStash error: {qe}")
-                        bot.send_message(message.chat.id, f"⚠️ QStash: {str(qe)[:300]}")
+                    else:
+                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_resp.status_code}: {qstash_resp.text[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
