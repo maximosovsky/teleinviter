@@ -214,54 +214,26 @@ def create_meeting(message):
                 else:
                     secret_param = f"?secret={REMINDER_SECRET}" if REMINDER_SECRET else ""
                     target_url = f"https://{APP_HOST}/reminder{secret_param}"
-                    headers = {
-                        "Authorization": f"Bearer {QSTASH_TOKEN}",
-                        "Content-Type": "application/json",
-                        "Upstash-Delay": f"{delay}s"
-                    }
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    import socket, ssl
-                    qstash_body = json.dumps(payload)
-                    request_path = f"/v2/publish/{target_url}"
-                    raw_request = (
-                        f"POST {request_path} HTTP/1.1\r\n"
-                        f"Host: qstash.upstash.io\r\n"
-                        f"Authorization: Bearer {QSTASH_TOKEN}\r\n"
-                        f"Content-Type: application/json\r\n"
-                        f"Upstash-Delay: {delay}s\r\n"
-                        f"Content-Length: {len(qstash_body)}\r\n"
-                        f"Connection: close\r\n"
-                        f"\r\n"
-                        f"{qstash_body}"
-                    )
-                    print(f"DEBUG request_path={request_path}")
-                    ctx = ssl.create_default_context()
-                    raw_sock = socket.create_connection(("qstash.upstash.io", 443), timeout=5)
-                    sock = ctx.wrap_socket(raw_sock, server_hostname="qstash.upstash.io")
-                    sock.sendall(raw_request.encode("ascii"))
-                    response = b""
-                    while True:
-                        chunk = sock.recv(4096)
-                        if not chunk:
-                            break
-                        response += chunk
-                    sock.close()
-                    resp_str = response.decode()
-                    status_line = resp_str.split("\r\n")[0]
-                    qstash_status = int(status_line.split(" ")[1])
-                    body_start = resp_str.find("\r\n\r\n") + 4
-                    qstash_text = resp_str[body_start:]
-                    print(f"QStash response: {qstash_status} {qstash_text}")
                     
-                    if qstash_status >= 200 and qstash_status < 300:
+                    from qstash import QStash as QStashClient
+                    qstash = QStashClient(QSTASH_TOKEN)
+                    try:
+                        res = qstash.message.publish_json(
+                            url=target_url,
+                            body=payload,
+                            delay=f"{delay}s",
+                        )
+                        print(f"QStash scheduled: {res.message_id}")
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
-                    else:
-                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_status}: {qstash_text[:300]}")
+                    except Exception as qe:
+                        print(f"QStash error: {qe}")
+                        bot.send_message(message.chat.id, f"⚠️ QStash: {str(qe)[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
