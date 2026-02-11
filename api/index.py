@@ -222,13 +222,19 @@ def create_meeting(message):
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
-                                  headers=headers, data=json.dumps(payload), timeout=5)
+                    qstash_resp = requests.post(
+                        f"https://qstash.upstash.io/v2/publish/{target_url}", 
+                        headers=headers, data=json.dumps(payload), timeout=5
+                    )
+                    print(f"QStash response: {qstash_resp.status_code} {qstash_resp.text}")
                     
-                    remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
-                    if target_username:
-                        remind_text += f" (+ напишу @{escape(target_username)})"
-                    bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
+                    if qstash_resp.status_code >= 200 and qstash_resp.status_code < 300:
+                        remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
+                        if target_username:
+                            remind_text += f" (+ напишу @{escape(target_username)})"
+                        bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
+                    else:
+                        bot.send_message(message.chat.id, f"⚠️ Не удалось запланировать напоминание (QStash: {qstash_resp.status_code})")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
