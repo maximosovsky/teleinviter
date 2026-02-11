@@ -222,10 +222,12 @@ def create_meeting(message):
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    import http.client
-                    qstash_path = f"/v2/publish/{target_url}"
+                    import http.client as httplib
+                    encoded_dest = urllib.parse.quote(target_url, safe='')
+                    qstash_path = f"/v2/publish/{encoded_dest}"
                     qstash_body = json.dumps(payload)
-                    conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=5)
+                    print(f"DEBUG qstash_path={qstash_path}")
+                    conn = httplib.HTTPSConnection("qstash.upstash.io", timeout=5)
                     conn.request("POST", qstash_path, body=qstash_body, headers=headers)
                     resp = conn.getresponse()
                     qstash_status = resp.status
