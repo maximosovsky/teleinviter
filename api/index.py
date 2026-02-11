@@ -218,28 +218,34 @@ def create_meeting(message):
                     if target_username:
                         payload["target_username"] = target_username
                     
-                    import httpx
-                    raw_path = f"/v2/publish/{target_url}".encode("ascii")
-                    url = httpx.URL("https://qstash.upstash.io").copy_with(raw_path=raw_path)
-                    qstash_resp = httpx.post(
-                        url,
-                        headers={
-                            "Authorization": f"Bearer {QSTASH_TOKEN}",
-                            "Content-Type": "application/json",
-                            "Upstash-Delay": f"{delay}s",
-                        },
-                        content=json.dumps(payload),
-                        timeout=10,
+                    import subprocess
+                    qstash_url = f"https://qstash.upstash.io/v2/publish/{target_url}"
+                    result = subprocess.run(
+                        [
+                            'curl', '-s',
+                            '-w', '\n%{http_code}',
+                            qstash_url,
+                            '-X', 'POST',
+                            '-H', f'Authorization: Bearer {QSTASH_TOKEN}',
+                            '-H', 'Content-Type: application/json',
+                            '-H', f'Upstash-Delay: {delay}s',
+                            '-d', json.dumps(payload),
+                        ],
+                        capture_output=True, text=True, timeout=10
                     )
-                    print(f"QStash response: {qstash_resp.status_code} {qstash_resp.text}")
+                    output_lines = result.stdout.strip().split('\n')
+                    qstash_status = int(output_lines[-1]) if output_lines[-1].isdigit() else 0
+                    qstash_text = '\n'.join(output_lines[:-1])
+                    print(f"QStash curl response: {qstash_status} {qstash_text}")
                     
-                    if qstash_resp.is_success:
+                    if 200 <= qstash_status < 300:
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
-                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_resp.status_code}: {qstash_resp.text[:300]}")
+                        error_msg = qstash_text or result.stderr
+                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_status}: {error_msg[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
