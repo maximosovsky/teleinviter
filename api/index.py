@@ -14,7 +14,6 @@ from flask import Flask, request
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
 QSTASH_TOKEN = os.getenv('QSTASH_TOKEN')
-REMINDER_SECRET = os.getenv('REMINDER_SECRET', '')
 TG_API_ID = os.getenv('TG_API_ID')
 TG_API_HASH = os.getenv('TG_API_HASH')
 TELETHON_SESSION = os.getenv('TELETHON_SESSION')
@@ -99,9 +98,6 @@ async def send_userbot_message(username, text):
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
-    # Проверка секрета в URL
-    if REMINDER_SECRET and request.args.get('secret', '') != REMINDER_SECRET:
-        return 'Forbidden', 403
 
     try:
         data = request.json
@@ -212,40 +208,28 @@ def create_meeting(message):
                 if not APP_HOST:
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
-                    secret_param = f"?secret={REMINDER_SECRET}" if REMINDER_SECRET else ""
-                    target_url = f"https://{APP_HOST}/reminder{secret_param}"
+                    target_url = f"https://{APP_HOST}/reminder"
+                    headers = {
+                        "Authorization": f"Bearer {QSTASH_TOKEN}",
+                        "Content-Type": "application/json",
+                        "Upstash-Delay": f"{delay}s"
+                    }
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    
-                    import subprocess
-                    qstash_url = f"https://qstash.upstash.io/v2/publish/{target_url}"
-                    result = subprocess.run(
-                        [
-                            'curl', '-s',
-                            '-w', '\n%{http_code}',
-                            qstash_url,
-                            '-X', 'POST',
-                            '-H', f'Authorization: Bearer {QSTASH_TOKEN}',
-                            '-H', 'Content-Type: application/json',
-                            '-H', f'Upstash-Delay: {delay}s',
-                            '-d', json.dumps(payload),
-                        ],
-                        capture_output=True, text=True, timeout=10
+                    resp = requests.post(
+                        f"https://qstash.upstash.io/v2/publish/{target_url}",
+                        headers=headers, data=json.dumps(payload), timeout=5
                     )
-                    output_lines = result.stdout.strip().split('\n')
-                    qstash_status = int(output_lines[-1]) if output_lines[-1].isdigit() else 0
-                    qstash_text = '\n'.join(output_lines[:-1])
-                    print(f"QStash curl response: {qstash_status} {qstash_text}")
+                    print(f"QStash response: {resp.status_code} {resp.text}")
                     
-                    if 200 <= qstash_status < 300:
+                    if resp.ok:
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
-                        error_msg = qstash_text or result.stderr
-                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_status}: {error_msg[:300]}")
+                        bot.send_message(message.chat.id, f"⚠️ QStash {resp.status_code}: {resp.text[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
