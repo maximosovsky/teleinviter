@@ -222,20 +222,24 @@ def create_meeting(message):
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    encoded_destination = urllib.parse.quote(target_url, safe='')
-                    qstash_resp = requests.post(
-                        f"https://qstash.upstash.io/v2/publish/{encoded_destination}", 
-                        headers=headers, data=json.dumps(payload), timeout=5
-                    )
-                    print(f"QStash response: {qstash_resp.status_code} {qstash_resp.text}")
+                    import http.client
+                    qstash_path = f"/v2/publish/{target_url}"
+                    qstash_body = json.dumps(payload)
+                    conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=5)
+                    conn.request("POST", qstash_path, body=qstash_body, headers=headers)
+                    resp = conn.getresponse()
+                    qstash_status = resp.status
+                    qstash_text = resp.read().decode()
+                    conn.close()
+                    print(f"QStash response: {qstash_status} {qstash_text}")
                     
-                    if qstash_resp.status_code >= 200 and qstash_resp.status_code < 300:
+                    if qstash_status >= 200 and qstash_status < 300:
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
-                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_resp.status_code}: {qstash_resp.text[:300]}")
+                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_status}: {qstash_text[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
