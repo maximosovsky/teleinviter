@@ -10,8 +10,8 @@ import hmac
 import hashlib
 from html import escape
 from flask import Flask, request
-from telethon import TelegramClient
-from telethon.sessions import StringSession
+
+# Telethon импортируется лениво — только при отправке ЛС (экономит ~1-2 сек на cold start)
 
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
@@ -47,9 +47,11 @@ def verify_qstash_signature(req):
     ).hexdigest()
     return hmac.compare_digest(signature, expected)
 
+USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{5,32}$')
+
 def is_valid_username(username):
     """Валидация Telegram username."""
-    return bool(re.match(r'^[a-zA-Z0-9_]{5,32}$', username))
+    return bool(USERNAME_RE.match(username))
 
 def is_user_allowed(user_id):
     """Проверка allowlist. Если список пуст — доступ для всех."""
@@ -100,6 +102,8 @@ def webhook():
 
 # Отправка личного сообщения через Telethon (userbot)
 async def send_userbot_message(username, text):
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
     client = TelegramClient(StringSession(TELETHON_SESSION), int(TG_API_ID), TG_API_HASH)
     await client.connect()
     try:
@@ -139,10 +143,7 @@ def reminder_trigger():
             safe_title = escape(title)
             msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {safe_title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(send_userbot_message(target_username, msg))
-                loop.close()
+                asyncio.run(send_userbot_message(target_username, msg))
                 bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{escape(target_username)}")
             except Exception as e:
                 print(f"Telethon error for @{target_username}: {e}")
