@@ -81,13 +81,15 @@ def reminder_trigger():
         if target_username and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
             msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
             try:
-                asyncio.get_event_loop().run_until_complete(send_userbot_message(target_username, msg))
-            except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(send_userbot_message(target_username, msg))
+                loop.close()
+                bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{target_username}")
             except Exception as e:
-                print(f"Userbot send error: {e}")
+                bot.send_message(chat_id, f"⚠️ Не удалось отправить @{target_username}: {e}")
+        elif target_username:
+            bot.send_message(chat_id, f"⚠️ Telethon не настроен (проверь env: TG_API_ID={bool(TG_API_ID)}, TG_API_HASH={bool(TG_API_HASH)}, SESSION={bool(TELETHON_SESSION)})")
     except Exception as e:
         print(f"Reminder error: {e}")
     return 'OK', 200
