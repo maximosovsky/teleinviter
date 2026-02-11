@@ -222,8 +222,9 @@ def create_meeting(message):
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
+                    encoded_destination = urllib.parse.quote(target_url, safe='')
                     qstash_resp = requests.post(
-                        f"https://qstash.upstash.io/v2/publish/{target_url}", 
+                        f"https://qstash.upstash.io/v2/publish/{encoded_destination}", 
                         headers=headers, data=json.dumps(payload), timeout=5
                     )
                     print(f"QStash response: {qstash_resp.status_code} {qstash_resp.text}")
