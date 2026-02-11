@@ -234,7 +234,7 @@ def create_meeting(message):
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
-                        bot.send_message(message.chat.id, f"⚠️ Не удалось запланировать напоминание (QStash: {qstash_resp.status_code})")
+                        bot.send_message(message.chat.id, f"⚠️ QStash {qstash_resp.status_code}: {qstash_resp.text[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
