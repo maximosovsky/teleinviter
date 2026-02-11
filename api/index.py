@@ -167,8 +167,8 @@ def create_meeting(message):
                     remind_text += f" (+ напишу @{target_username})"
                 bot.send_message(message.chat.id, remind_text)
 
-    except Exception as e:
-        bot.send_message(message.chat.id, f"❌ Ошибка: {e}")
+    except Exception:
+        bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
 
 # Экспорт для Vercel
 app = app
