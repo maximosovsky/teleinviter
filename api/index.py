@@ -6,8 +6,6 @@ import requests
 import json
 import asyncio
 import re
-import hmac
-import hashlib
 from html import escape
 from flask import Flask, request
 
@@ -16,7 +14,7 @@ from flask import Flask, request
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
 QSTASH_TOKEN = os.getenv('QSTASH_TOKEN')
-QSTASH_CURRENT_SIGNING_KEY = os.getenv('QSTASH_CURRENT_SIGNING_KEY')
+REMINDER_SECRET = os.getenv('REMINDER_SECRET', '')
 TG_API_ID = os.getenv('TG_API_ID')
 TG_API_HASH = os.getenv('TG_API_HASH')
 TELETHON_SESSION = os.getenv('TELETHON_SESSION')
@@ -33,19 +31,6 @@ bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
 
 # --- Утилиты безопасности ---
-
-def verify_qstash_signature(req):
-    """Проверка подписи QStash."""
-    if not QSTASH_CURRENT_SIGNING_KEY:
-        return False
-    signature = req.headers.get('Upstash-Signature', '')
-    if not signature:
-        return False
-    body = req.get_data()
-    expected = hmac.new(
-        QSTASH_CURRENT_SIGNING_KEY.encode(), body, hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(signature, expected)
 
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{5,32}$')
 
@@ -114,8 +99,8 @@ async def send_userbot_message(username, text):
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
-    # Проверка подписи QStash
-    if QSTASH_CURRENT_SIGNING_KEY and not verify_qstash_signature(request):
+    # Проверка секрета в URL
+    if REMINDER_SECRET and request.args.get('secret', '') != REMINDER_SECRET:
         return 'Forbidden', 403
 
     try:
@@ -227,7 +212,8 @@ def create_meeting(message):
                 if not APP_HOST:
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
-                    target_url = f"https://{APP_HOST}/reminder"
+                    secret_param = f"?secret={REMINDER_SECRET}" if REMINDER_SECRET else ""
+                    target_url = f"https://{APP_HOST}/reminder{secret_param}"
                     headers = {
                         "Authorization": f"Bearer {QSTASH_TOKEN}",
                         "Content-Type": "application/json",
