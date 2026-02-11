@@ -5,6 +5,10 @@ import os
 import requests
 import json
 import asyncio
+import re
+import hmac
+import hashlib
+from html import escape
 from flask import Flask, request
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -12,16 +16,58 @@ from telethon.sessions import StringSession
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
 QSTASH_TOKEN = os.getenv('QSTASH_TOKEN')
+QSTASH_CURRENT_SIGNING_KEY = os.getenv('QSTASH_CURRENT_SIGNING_KEY')
 TG_API_ID = os.getenv('TG_API_ID')
 TG_API_HASH = os.getenv('TG_API_HASH')
 TELETHON_SESSION = os.getenv('TELETHON_SESSION')
+WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
+APP_HOST = os.getenv('APP_HOST')
+
+# Allowlist: Telegram user IDs, которым разрешено создавать встречи
+ALLOWED_USER_IDS = os.getenv('ALLOWED_USER_IDS', '')
+ALLOWED_USERS = set()
+if ALLOWED_USER_IDS:
+    ALLOWED_USERS = {int(uid.strip()) for uid in ALLOWED_USER_IDS.split(',') if uid.strip()}
 
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
 
+# --- Утилиты безопасности ---
+
+def verify_qstash_signature(req):
+    """Проверка подписи QStash."""
+    if not QSTASH_CURRENT_SIGNING_KEY:
+        return False
+    signature = req.headers.get('Upstash-Signature', '')
+    if not signature:
+        return False
+    body = req.get_data()
+    expected = hmac.new(
+        QSTASH_CURRENT_SIGNING_KEY.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+def is_valid_username(username):
+    """Валидация Telegram username."""
+    return bool(re.match(r'^[a-zA-Z0-9_]{5,32}$', username))
+
+def is_user_allowed(user_id):
+    """Проверка allowlist. Если список пуст — доступ для всех."""
+    if not ALLOWED_USERS:
+        return True
+    return user_id in ALLOWED_USERS
+
+# --- Маршруты ---
+
 @app.route('/', methods=['GET', 'POST'])
 def webhook():
     if request.method == 'POST':
+        # Проверка secret_token от Telegram
+        if WEBHOOK_SECRET:
+            token = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
+            if token != WEBHOOK_SECRET:
+                return 'Forbidden', 403
+
         try:
             json_string = request.get_data().decode('utf-8')
             update = telebot.types.Update.de_json(json_string)
@@ -31,7 +77,6 @@ def webhook():
             print(f"Error processing update: {e}")
             return 'Error', 500
     else:
-        # ПРАВИЛЬНЫЙ БЛОК ДЛЯ ОТОБРАЖЕНИЯ СТРАНИЦЫ В БРАУЗЕРЕ
         return '''
         <html>
             <head>
@@ -65,46 +110,70 @@ async def send_userbot_message(username, text):
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
+    # Проверка подписи QStash
+    if QSTASH_CURRENT_SIGNING_KEY and not verify_qstash_signature(request):
+        return 'Forbidden', 403
+
     try:
         data = request.json
         chat_id = data.get('chat_id')
-        zoom = data.get('zoom')
+        zoom = data.get('zoom', '')
         target_username = data.get('target_username')
         title = data.get('title', 'Встреча')
 
+        # Экранирование для HTML
+        safe_zoom = escape(zoom)
+
         # Напоминание в чат бота
         bot.send_message(chat_id, 
-            f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{zoom}", 
+            f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{safe_zoom}", 
             parse_mode='HTML', disable_web_page_preview=True)
 
         # Личное сообщение участнику через userbot
         if target_username and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
-            msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
+            # Валидация username
+            if not is_valid_username(target_username):
+                print(f"Invalid username rejected: {target_username}")
+                return 'OK', 200
+
+            safe_title = escape(title)
+            msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {safe_title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(send_userbot_message(target_username, msg))
                 loop.close()
-                bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{target_username}")
+                bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{escape(target_username)}")
             except Exception as e:
-                bot.send_message(chat_id, f"⚠️ Не удалось отправить @{target_username}: {e}")
+                print(f"Telethon error for @{target_username}: {e}")
+                bot.send_message(chat_id, f"⚠️ Не удалось отправить личное напоминание")
         elif target_username:
-            bot.send_message(chat_id, f"⚠️ Telethon не настроен (проверь env: TG_API_ID={bool(TG_API_ID)}, TG_API_HASH={bool(TG_API_HASH)}, SESSION={bool(TELETHON_SESSION)})")
+            print(f"Telethon not configured, cannot send DM to @{target_username}")
     except Exception as e:
         print(f"Reminder error: {e}")
     return 'OK', 200
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    if not is_user_allowed(message.from_user.id):
+        return
     bot.send_message(message.chat.id, "Бот готов! Пришли: <code>Тема, Дата, Время Ist, Ссылка, @username</code>\n(@username — необязательно)", parse_mode='HTML')
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
+    if not is_user_allowed(message.from_user.id):
+        return
+
     try:
         parts = [p.strip() for p in message.text.split(',')]
         if len(parts) < 4: raise ValueError
         title, date_val, time_val, zoom = parts[:4]
         target_username = parts[4].lstrip('@') if len(parts) >= 5 else None
+
+        # Валидация username
+        if target_username and not is_valid_username(target_username):
+            bot.send_message(message.chat.id, "❌ Некорректный @username (допустимы: буквы, цифры, _, длина 5–32)")
+            return
 
         # Логика времени
         naive_dt = datetime.strptime(f"{date_val} {time_val}", "%d.%m.%Y %H:%M")
@@ -135,11 +204,15 @@ def create_meeting(message):
             "details": f"Zoom: {zoom}", "ctz": "UTC"
         })
 
+        # Экранирование пользовательского ввода для HTML
+        safe_title = escape(title)
+        safe_zoom = escape(zoom)
+
         # Ответ в Телеграм
-        res = (f"<b>{title}</b>\n"
+        res = (f"<b>{safe_title}</b>\n"
                f"⚡️ <b>{date_text}</b> в <b>{day_name}</b> в <b>{time_val} Ist</b>\n"
                f"<code>{cities}</code>\n\n"
-               f"<b>ZOOM</b> — {zoom}\n\n"
+               f"<b>ZOOM</b> — {safe_zoom}\n\n"
                f"📲 <a href='{gcal}'>Добавить в календарь</a>")
 
         bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
@@ -150,27 +223,28 @@ def create_meeting(message):
             delay = int((reminder_time - now_ist).total_seconds())
 
             if delay > 0:
-                target_url = f"https://{request.host}/reminder"
-                headers = {
-                    "Authorization": f"Bearer {QSTASH_TOKEN}",
-                    "Content-Type": "application/json",
-                    "Upstash-Delay": f"{delay}s"
-                }
-                payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
-                if target_username:
-                    payload["target_username"] = target_username
-                requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
-                              headers=headers, data=json.dumps(payload), timeout=5)
-                
-                remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
-                if target_username:
-                    remind_text += f" (+ напишу @{target_username})"
-                bot.send_message(message.chat.id, remind_text)
+                if not APP_HOST:
+                    print("APP_HOST not set, skipping QStash reminder")
+                else:
+                    target_url = f"https://{APP_HOST}/reminder"
+                    headers = {
+                        "Authorization": f"Bearer {QSTASH_TOKEN}",
+                        "Content-Type": "application/json",
+                        "Upstash-Delay": f"{delay}s"
+                    }
+                    payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
+                    if target_username:
+                        payload["target_username"] = target_username
+                    requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
+                                  headers=headers, data=json.dumps(payload), timeout=5)
+                    
+                    remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
+                    if target_username:
+                        remind_text += f" (+ напишу @{escape(target_username)})"
+                    bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
 
 # Экспорт для Vercel
 app = app
-
-
