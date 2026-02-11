@@ -4,11 +4,17 @@ import urllib.parse
 import os
 import requests
 import json
+import asyncio
 from flask import Flask, request
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 # Инициализация
 API_TOKEN = os.getenv('BOT_TOKEN')
 QSTASH_TOKEN = os.getenv('QSTASH_TOKEN')
+TG_API_ID = os.getenv('TG_API_ID')
+TG_API_HASH = os.getenv('TG_API_HASH')
+TELETHON_SESSION = os.getenv('TELETHON_SESSION')
 
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
@@ -47,6 +53,15 @@ def webhook():
         </html>
         ''', 200
 
+# Отправка личного сообщения через Telethon (userbot)
+async def send_userbot_message(username, text):
+    client = TelegramClient(StringSession(TELETHON_SESSION), int(TG_API_ID), TG_API_HASH)
+    await client.connect()
+    try:
+        await client.send_message(username, text)
+    finally:
+        await client.disconnect()
+
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
@@ -54,23 +69,40 @@ def reminder_trigger():
         data = request.json
         chat_id = data.get('chat_id')
         zoom = data.get('zoom')
+        target_username = data.get('target_username')
+        title = data.get('title', 'Встреча')
+
+        # Напоминание в чат бота
         bot.send_message(chat_id, 
             f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{zoom}", 
             parse_mode='HTML', disable_web_page_preview=True)
+
+        # Личное сообщение участнику через userbot
+        if target_username and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
+            msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
+            try:
+                asyncio.get_event_loop().run_until_complete(send_userbot_message(target_username, msg))
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(send_userbot_message(target_username, msg))
+            except Exception as e:
+                print(f"Userbot send error: {e}")
     except Exception as e:
         print(f"Reminder error: {e}")
     return 'OK', 200
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "Бот готов! Пришли: <code>Тема, Дата, Время Ist, Ссылка</code>", parse_mode='HTML')
+    bot.send_message(message.chat.id, "Бот готов! Пришли: <code>Тема, Дата, Время Ist, Ссылка, @username</code>\n(@username — необязательно)", parse_mode='HTML')
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
     try:
         parts = [p.strip() for p in message.text.split(',')]
         if len(parts) < 4: raise ValueError
-        title, date_val, time_val, zoom = parts
+        title, date_val, time_val, zoom = parts[:4]
+        target_username = parts[4].lstrip('@') if len(parts) >= 5 else None
 
         # Логика времени
         naive_dt = datetime.strptime(f"{date_val} {time_val}", "%d.%m.%Y %H:%M")
@@ -122,11 +154,16 @@ def create_meeting(message):
                     "Content-Type": "application/json",
                     "Upstash-Delay": f"{delay}s"
                 }
-                payload = {"chat_id": message.chat.id, "zoom": zoom}
+                payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
+                if target_username:
+                    payload["target_username"] = target_username
                 requests.post(f"https://qstash.upstash.io/v2/publish/{target_url}", 
                               headers=headers, data=json.dumps(payload), timeout=5)
                 
-                bot.send_message(message.chat.id, f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist")
+                remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
+                if target_username:
+                    remind_text += f" (+ напишу @{target_username})"
+                bot.send_message(message.chat.id, remind_text)
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата!")
