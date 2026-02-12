@@ -210,6 +210,11 @@ def create_meeting(message):
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
                     qstash_path = f"/v2/publish/https://{APP_HOST}/reminder"
+                    
+                    # DEBUG: показать точные значения в чат
+                    bot.send_message(message.chat.id, 
+                        f"🔧 DEBUG:\nAPP_HOST='{APP_HOST}'\npath='{qstash_path}'\nlen(APP_HOST)={len(APP_HOST)}\nrepr={repr(APP_HOST)}")
+                    
                     qstash_headers = {
                         "Authorization": f"Bearer {QSTASH_TOKEN}",
                         "Content-Type": "application/json",
