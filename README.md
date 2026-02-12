@@ -9,7 +9,7 @@ Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware
 - **Meeting card** — title, date, day of week, time
 - **DST-aware timezones** — auto-conversion for 7 cities via `zoneinfo` (IANA)
 - **Google Calendar** — inline button "📲 Add to Calendar"
-- **Reminders** — 45 min and 5 min before via QStash (up to 7 days), with meeting title and link
+- **Reminders** — 45 min and 5 min before via QStash (up to 7 days), with meeting title and link. Both reminders send DMs to participants
 - **Cancel reminder** — inline button "❌ Cancel" or `/cancel`
 - **Multiple participants** — up to 5 `@usernames` space-separated, each gets a DM via Telethon
 - **Security** — webhook secret, allowlist, `/reminder` endpoint protection, input sanitization
@@ -68,12 +68,16 @@ User → Telegram → Vercel (webhook /)
            (delay Ns)     inline buttons    (cancel)
                  │                              │
                  ▼                              ▼
-          /reminder endpoint           QStash DELETE
-                 │                     /v2/messages/{id}
-          ┌──────┴──────┐
-          │             │
-     Reminder       Telethon DM
-     in bot chat    to participants
+           /reminder endpoint           QStash DELETE
+                  │                     /v2/messages/{id}
+           ┌──────┴──────┐
+           │  type=main   │  type=urgent
+           │  (45 min)    │  (5 min)
+           ├──────────────┤
+           │              │
+      Reminder +      Reminder +
+      Telethon DM     Telethon DM
+      to participants to participants
 ```
 
 ### Cities & Timezones
