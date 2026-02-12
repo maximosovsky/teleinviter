@@ -312,65 +312,69 @@ def create_meeting(message):
                                     disable_web_page_preview=True, reply_markup=kb)
 
         # Будильник QStash (45 мин до встречи)
-        if QSTASH_TOKEN:
-            reminder_time = meeting_dt_ist - timedelta(minutes=45)
-            delay = int((reminder_time - now_ist).total_seconds())
+        try:
+            if QSTASH_TOKEN:
+                reminder_time = meeting_dt_ist - timedelta(minutes=45)
+                delay = int((reminder_time - now_ist).total_seconds())
 
-            if delay > 0:
-                max_delay = 604800  # QStash free: макс 7 дней
-                if delay > max_delay:
-                    days = delay // 86400
-                    bot.send_message(message.chat.id, f"⏳ Напоминание не установлено — встреча дальше 7 дней (через {days} дн.)")
-                elif not APP_HOST:
-                    print("APP_HOST not set, skipping QStash reminder")
-                else:
-                    # Нормализация APP_HOST: убираем схему и trailing slash
-                    clean_host = APP_HOST.replace("https://", "").replace("http://", "").rstrip("/")
-                    qstash_path = f"/v2/publish/https://{clean_host}/reminder"
-                    
-                    qstash_headers = {
-                        "Authorization": f"Bearer {QSTASH_TOKEN}",
-                        "Content-Type": "application/json",
-                        "Upstash-Delay": f"{delay}s",
-                    }
-                    if REMINDER_SECRET:
-                        qstash_headers["Upstash-Forward-X-Reminder-Secret"] = REMINDER_SECRET
-                    payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
-                    if target_usernames:
-                        payload["target_usernames"] = target_usernames
-                    
-                    # http.client не нормализует URL (requests ломает https:// в пути)
-                    conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
-                    conn.request("POST", qstash_path, body=json.dumps(payload), headers=qstash_headers)
-                    resp = conn.getresponse()
-                    resp_body = resp.read().decode()
-                    conn.close()
-                    print(f"QStash response: {resp.status} {resp_body}")
-                    
-                    if 200 <= resp.status < 300:
-                        # Сохраняем messageId для /cancel и inline-кнопки
-                        qstash_msg_id = None
-                        try:
-                            qstash_data = json.loads(resp_body)
-                            qstash_msg_id = qstash_data.get('messageId')
-                            if qstash_msg_id:
-                                last_qstash_msg[message.chat.id] = qstash_msg_id
-                        except Exception:
-                            pass
-                        
-                        remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
-                        if target_usernames:
-                            mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
-                            remind_text += f" (+ напишу {mentions})"
-                        
-                        # Кнопка отмены прямо в сообщении-подтверждении
-                        remind_kb = None
-                        if qstash_msg_id:
-                            remind_kb = telebot.types.InlineKeyboardMarkup()
-                            remind_kb.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
-                        bot.send_message(message.chat.id, remind_text, parse_mode='HTML', reply_markup=remind_kb)
+                if delay > 0:
+                    max_delay = 604800  # QStash free: макс 7 дней
+                    if delay > max_delay:
+                        days = delay // 86400
+                        bot.send_message(message.chat.id, f"⏳ Напоминание не установлено — встреча дальше 7 дней (через {days} дн.)")
+                    elif not APP_HOST:
+                        print("APP_HOST not set, skipping QStash reminder")
                     else:
-                        bot.send_message(message.chat.id, f"⚠️ QStash {resp.status}: {resp_body[:300]}")
+                        # Нормализация APP_HOST: убираем схему и trailing slash
+                        clean_host = APP_HOST.replace("https://", "").replace("http://", "").rstrip("/")
+                        qstash_path = f"/v2/publish/https://{clean_host}/reminder"
+                        
+                        qstash_headers = {
+                            "Authorization": f"Bearer {QSTASH_TOKEN}",
+                            "Content-Type": "application/json",
+                            "Upstash-Delay": f"{delay}s",
+                        }
+                        if REMINDER_SECRET:
+                            qstash_headers["Upstash-Forward-X-Reminder-Secret"] = REMINDER_SECRET
+                        payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
+                        if target_usernames:
+                            payload["target_usernames"] = target_usernames
+                        
+                        # http.client не нормализует URL (requests ломает https:// в пути)
+                        conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
+                        conn.request("POST", qstash_path, body=json.dumps(payload), headers=qstash_headers)
+                        resp = conn.getresponse()
+                        resp_body = resp.read().decode()
+                        conn.close()
+                        print(f"QStash response: {resp.status} {resp_body}")
+                        
+                        if 200 <= resp.status < 300:
+                            # Сохраняем messageId для /cancel и inline-кнопки
+                            qstash_msg_id = None
+                            try:
+                                qstash_data = json.loads(resp_body)
+                                qstash_msg_id = qstash_data.get('messageId')
+                                if qstash_msg_id:
+                                    last_qstash_msg[message.chat.id] = qstash_msg_id
+                            except Exception:
+                                pass
+                            
+                            remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
+                            if target_usernames:
+                                mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
+                                remind_text += f" (+ напишу {mentions})"
+                            
+                            # Кнопка отмены прямо в сообщении-подтверждении
+                            remind_kb = None
+                            if qstash_msg_id:
+                                remind_kb = telebot.types.InlineKeyboardMarkup()
+                                remind_kb.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
+                            bot.send_message(message.chat.id, remind_text, parse_mode='HTML', reply_markup=remind_kb)
+                        else:
+                            bot.send_message(message.chat.id, f"⚠️ QStash {resp.status}: {resp_body[:300]}")
+        except Exception as e:
+            print(f"QStash error: {e}")
+            bot.send_message(message.chat.id, "⚠️ Не удалось установить напоминание")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2")
