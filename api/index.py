@@ -317,7 +317,11 @@ def create_meeting(message):
             delay = int((reminder_time - now_ist).total_seconds())
 
             if delay > 0:
-                if not APP_HOST:
+                max_delay = 604800  # QStash free: макс 7 дней
+                if delay > max_delay:
+                    days = delay // 86400
+                    bot.send_message(message.chat.id, f"⏳ Напоминание не установлено — встреча дальше 7 дней (через {days} дн.)")
+                elif not APP_HOST:
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
                     # Нормализация APP_HOST: убираем схему и trailing slash
