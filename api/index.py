@@ -129,7 +129,7 @@ def reminder_trigger():
                 bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{escape(target_username)}")
             except Exception as e:
                 print(f"Telethon error for @{target_username}: {e}")
-                bot.send_message(chat_id, f"⚠️ Не удалось отправить личное напоминание")
+                bot.send_message(chat_id, f"⚠️ Telethon error: {str(e)[:300]}")
         elif target_username:
             print(f"Telethon not configured, cannot send DM to @{target_username}")
     except Exception as e:
