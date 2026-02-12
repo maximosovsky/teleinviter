@@ -22,11 +22,21 @@ WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 APP_HOST = os.getenv('APP_HOST')
 REMINDER_SECRET = os.getenv('REMINDER_SECRET')
 
-# Allowlist: Telegram user IDs, которым разрешено создавать встречи
+# Allowlist: Telegram user IDs (env — резервный)
 ALLOWED_USER_IDS = os.getenv('ALLOWED_USER_IDS', '')
-ALLOWED_USERS = set()
+ALLOWED_USERS_ENV = set()
 if ALLOWED_USER_IDS:
-    ALLOWED_USERS = {int(uid.strip()) for uid in ALLOWED_USER_IDS.split(',') if uid.strip()}
+    ALLOWED_USERS_ENV = {int(uid.strip()) for uid in ALLOWED_USER_IDS.split(',') if uid.strip()}
+
+# Upstash Redis (динамический allowlist)
+REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL')
+REDIS_TOKEN = os.getenv('UPSTASH_REDIS_REST_TOKEN')
+redis_client = None
+if REDIS_URL and REDIS_TOKEN:
+    from upstash_redis import Redis
+    redis_client = Redis(url=REDIS_URL, token=REDIS_TOKEN)
+
+REDIS_ALLOWLIST_KEY = 'allowed_users'
 
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
@@ -58,11 +68,34 @@ def parse_usernames(text):
     raw = [u.lstrip('@').strip() for u in text.split() if u.strip()]
     return [u for u in raw if is_valid_username(u)]
 
+def get_redis_allowed_users():
+    """Получить allowlist из Redis. Возвращает set или None при ошибке."""
+    if not redis_client:
+        return None
+    try:
+        members = redis_client.smembers(REDIS_ALLOWLIST_KEY)
+        if members:
+            return {int(uid) for uid in members}
+        return set()
+    except Exception as e:
+        print(f"Redis read error: {e}")
+        return None
+
 def is_user_allowed(user_id):
-    """Проверка allowlist. Если список пуст — доступ для всех."""
-    if not ALLOWED_USERS:
+    """Проверка allowlist: Redis → env fallback. Пустой список = доступ всем."""
+    # Сначала проверяем Redis
+    redis_users = get_redis_allowed_users()
+    if redis_users is not None:
+        if not redis_users:  # Redis есть, но список пуст
+            # Fallback на env если Redis пуст
+            if not ALLOWED_USERS_ENV:
+                return True
+            return user_id in ALLOWED_USERS_ENV
+        return user_id in redis_users
+    # Redis недоступен — fallback на env
+    if not ALLOWED_USERS_ENV:
         return True
-    return user_id in ALLOWED_USERS
+    return user_id in ALLOWED_USERS_ENV
 
 def cancel_qstash_message(msg_id):
     """Отменить QStash сообщение по ID. Возвращает True если успешно."""
@@ -225,8 +258,73 @@ def start(message):
         "Бот готов! Пришли:\n"
         "<code>Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2</code>\n\n"
         "@username — необязательно (можно несколько через пробел)\n"
-        "/cancel — отменить последнее напоминание",
+        "/cancel — отменить последнее напоминание\n"
+        "/adduser ID — добавить пользователя\n"
+        "/removeuser ID — удалить пользователя\n"
+        "/users — список пользователей",
         parse_mode='HTML')
+
+@bot.message_handler(commands=['adduser'])
+def add_user(message):
+    if not is_user_allowed(message.from_user.id):
+        return
+    if not redis_client:
+        bot.send_message(message.chat.id, "⚠️ Redis не настроен")
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.send_message(message.chat.id, "❌ Формат: /adduser <ID>\nID можно узнать у @userinfobot")
+        return
+    try:
+        user_id = int(parts[1])
+        redis_client.sadd(REDIS_ALLOWLIST_KEY, str(user_id))
+        bot.send_message(message.chat.id, f"✅ Пользователь <code>{user_id}</code> добавлен", parse_mode='HTML')
+    except ValueError:
+        bot.send_message(message.chat.id, "❌ ID должен быть числом")
+
+@bot.message_handler(commands=['removeuser'])
+def remove_user(message):
+    if not is_user_allowed(message.from_user.id):
+        return
+    if not redis_client:
+        bot.send_message(message.chat.id, "⚠️ Redis не настроен")
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.send_message(message.chat.id, "❌ Формат: /removeuser <ID>")
+        return
+    try:
+        user_id = int(parts[1])
+        # Нельзя удалить самого себя
+        if user_id == message.from_user.id:
+            bot.send_message(message.chat.id, "❌ Нельзя удалить себя")
+            return
+        redis_client.srem(REDIS_ALLOWLIST_KEY, str(user_id))
+        bot.send_message(message.chat.id, f"✅ Пользователь <code>{user_id}</code> удалён", parse_mode='HTML')
+    except ValueError:
+        bot.send_message(message.chat.id, "❌ ID должен быть числом")
+
+@bot.message_handler(commands=['users'])
+def list_users(message):
+    if not is_user_allowed(message.from_user.id):
+        return
+    if not redis_client:
+        bot.send_message(message.chat.id, "⚠️ Redis не настроен")
+        return
+    try:
+        members = redis_client.smembers(REDIS_ALLOWLIST_KEY)
+        if members:
+            user_list = "\n".join(f"• <code>{uid}</code>" for uid in sorted(members))
+            bot.send_message(message.chat.id, f"👥 Разрешённые пользователи:\n{user_list}", parse_mode='HTML')
+        else:
+            env_info = ""
+            if ALLOWED_USERS_ENV:
+                env_list = ", ".join(str(uid) for uid in ALLOWED_USERS_ENV)
+                env_info = f"\n\n📋 Из env: {env_list}"
+            bot.send_message(message.chat.id, f"📋 Список в Redis пуст (доступ через env){env_info}")
+    except Exception as e:
+        print(f"Redis list error: {e}")
+        bot.send_message(message.chat.id, "⚠️ Ошибка чтения Redis")
 
 @bot.message_handler(commands=['cancel'])
 def cancel_reminder(message):
