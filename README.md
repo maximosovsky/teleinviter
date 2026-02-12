@@ -31,7 +31,7 @@ Strategy, 15.03.2026, 18:00, https://zoom.us/j/123456
 ```
 
 ```
-Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @ivan @maria
+Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @osowski @maxim_osovsky
 ```
 
 ### Commands
