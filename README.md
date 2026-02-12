@@ -1,84 +1,84 @@
 # 🗓 InviterLink Bot
 
-Telegram-бот для организации встреч. Создаёт карточку встречи с пересчётом времени по городам, ссылкой в Google Calendar, напоминанием за 45 минут и личными сообщениями участникам.
+Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware time conversion, Google Calendar link, reminders at 45 and 5 minutes before, and personal messages to participants.
 
 ![logo](logo.png)
 
-## Возможности
+## Features
 
-- **Карточка встречи** — название, дата, день недели, время
-- **DST-aware часовые пояса** — автопересчёт для 7 городов через `zoneinfo` (IANA)
-- **Google Calendar** — inline-кнопка «📲 Добавить в календарь»
-- **Напоминание** — за 45 минут через QStash (до 7 дней), с названием встречи и ссылкой
-- **Отмена напоминания** — inline-кнопка «❌ Отменить» или `/cancel`
-- **Несколько участников** — до 5 `@username` через пробел, каждому придёт ЛС через Telethon
-- **Безопасность** — webhook secret, allowlist, защита `/reminder` эндпоинта, экранирование ввода
+- **Meeting card** — title, date, day of week, time
+- **DST-aware timezones** — auto-conversion for 7 cities via `zoneinfo` (IANA)
+- **Google Calendar** — inline button "📲 Add to Calendar"
+- **Reminders** — 45 min and 5 min before via QStash (up to 7 days), with meeting title and link
+- **Cancel reminder** — inline button "❌ Cancel" or `/cancel`
+- **Multiple participants** — up to 5 `@usernames` space-separated, each gets a DM via Telethon
+- **Security** — webhook secret, allowlist, `/reminder` endpoint protection, input sanitization
 
-## Как пользоваться
+## Usage
 
-Отправь боту сообщение в формате:
-
-```
-Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2
-```
-
-`@username` — необязательно (можно несколько через пробел).
-
-**Примеры:**
+Send the bot a message in this format:
 
 ```
-Стратегия, 15.03.2026, 18:00, https://zoom.us/j/123456
+Title, DD.MM.YYYY, HH:MM, Link, @user1 @user2
+```
+
+`@username` is optional (multiple allowed, space-separated).
+
+**Examples:**
+
+```
+Strategy, 15.03.2026, 18:00, https://zoom.us/j/123456
 ```
 
 ```
-Созвон, 13.02.2026, 20:00, https://zoom.us/j/789, @ivan @maria
+Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @ivan @maria
 ```
 
-### Команды
+### Commands
 
-| Команда | Описание |
+| Command | Description |
 |---|---|
-| `/start` | Справка по формату |
-| `/cancel` | Отменить последнее напоминание |
+| `/start` | Show format help |
+| `/cancel` | Cancel last reminder |
 
-## Стек
+## Stack
 
-| Технология | Роль |
+| Technology | Role |
 |---|---|
-| Python + Flask | HTTP-сервер (serverless) |
+| Python + Flask | HTTP server (serverless) |
 | pyTelegramBotAPI | Telegram Bot API |
-| Telethon | Userbot для личных сообщений |
-| QStash (Upstash) | Отложенные напоминания (до 7 дней) |
-| zoneinfo | DST-aware часовые пояса |
-| Vercel | Деплой |
+| Telethon | Userbot for direct messages |
+| QStash (Upstash) | Delayed reminders (up to 7 days) |
+| zoneinfo | DST-aware timezones |
+| Vercel | Deployment |
 
-## Архитектура
+## Architecture
 
 ```
-Пользователь → Telegram → Vercel (webhook /)
-                                    │
-                          ┌─────────┴──────────┐
-                          │   api/index.py      │
-                          │   Flask + Bot        │
-                          └─────────┬──────────┘
-                                    │
-                     ┌──────────────┼───────────────┐
-                     │              │               │
-               QStash publish   Карточка +      Callback
-               (delay Ns)     inline-кнопки     (отмена)
-                     │                              │
-                     ▼                              ▼
-              /reminder endpoint           QStash DELETE
-                     │                     /v2/messages/{id}
-              ┌──────┴──────┐
-              │             │
-         Напоминание    Telethon ЛС
-         в чат бота     участникам
+User → Telegram → Vercel (webhook /)
+                                │
+                      ┌─────────┴──────────┐
+                      │   api/index.py      │
+                      │   Flask + Bot        │
+                      └─────────┬──────────┘
+                                │
+                 ┌──────────────┼───────────────┐
+                 │              │               │
+           QStash publish   Card +          Callback
+           (delay Ns)     inline buttons    (cancel)
+                 │                              │
+                 ▼                              ▼
+          /reminder endpoint           QStash DELETE
+                 │                     /v2/messages/{id}
+          ┌──────┴──────┐
+          │             │
+     Reminder       Telethon DM
+     in bot chat    to participants
 ```
 
-### Города и таймзоны
+### Cities & Timezones
 
-| Город | IANA зона |
+| City | IANA Zone |
 |---|---|
 | Riga | `Europe/Riga` |
 | Tel-Aviv | `Asia/Tel_Aviv` |
@@ -88,63 +88,63 @@ Telegram-бот для организации встреч. Создаёт ка�
 | Beijing | `Asia/Shanghai` |
 | Los Angeles | `America/Los_Angeles` |
 
-Время вводится по Istanbul (IST). Если Riga и Tel-Aviv совпадают — они объединяются: `19:00 Riga;Tel-Aviv`.
+Time input is in Istanbul (IST). If Riga and Tel-Aviv match — they merge: `19:00 Riga;Tel-Aviv`.
 
-## Деплой на Vercel
+## Deploy to Vercel
 
-### 1. Переменные окружения
+### 1. Environment Variables
 
-Добавь в Vercel → Settings → Environment Variables:
+Add to Vercel → Settings → Environment Variables:
 
-| Переменная | Описание | Обязательна |
+| Variable | Description | Required |
 |---|---|---|
-| `BOT_TOKEN` | Токен бота от [@BotFather](https://t.me/BotFather) | ✅ |
-| `QSTASH_TOKEN` | Токен [Upstash QStash](https://upstash.com/) | ✅ |
-| `APP_HOST` | Домен Vercel (например `teleinviter.vercel.app`) | ✅ |
-| `TG_API_ID` | API ID приложения с [my.telegram.org](https://my.telegram.org/) | Для ЛС |
-| `TG_API_HASH` | API Hash с my.telegram.org | Для ЛС |
-| `TELETHON_SESSION` | StringSession (см. ниже) | Для ЛС |
-| `WEBHOOK_SECRET` | Секрет для верификации вебхуков Telegram | Рекомендуется |
-| `REMINDER_SECRET` | Секрет для защиты `/reminder` эндпоинта | Рекомендуется |
-| `ALLOWED_USER_IDS` | Список Telegram user ID через запятую | Опционально |
+| `BOT_TOKEN` | Bot token from [@BotFather](https://t.me/BotFather) | ✅ |
+| `QSTASH_TOKEN` | [Upstash QStash](https://upstash.com/) token | ✅ |
+| `APP_HOST` | Vercel domain (e.g. `teleinviter.vercel.app`) | ✅ |
+| `TG_API_ID` | App API ID from [my.telegram.org](https://my.telegram.org/) | For DMs |
+| `TG_API_HASH` | API Hash from my.telegram.org | For DMs |
+| `TELETHON_SESSION` | StringSession (see below) | For DMs |
+| `WEBHOOK_SECRET` | Secret for Telegram webhook verification | Recommended |
+| `REMINDER_SECRET` | Secret for `/reminder` endpoint protection | Recommended |
+| `ALLOWED_USER_IDS` | Comma-separated Telegram user IDs | Optional |
 
-### 2. Генерация Telethon-сессии
+### 2. Generate Telethon Session
 
 ```bash
 pip install telethon
 python generate_session.py
 ```
 
-Скрипт запросит `API_ID` и `API_HASH`, авторизует аккаунт и выдаст строку сессии. Скопируй её в переменную `TELETHON_SESSION`.
+The script will ask for `API_ID` and `API_HASH`, authorize your account, and output a session string. Copy it to the `TELETHON_SESSION` variable.
 
-### 3. Установка Webhook
+### 3. Set Webhook
 
-После деплоя на Vercel установи вебхук:
+After deploying to Vercel, set the webhook:
 
 ```
 https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<your-domain>.vercel.app/&secret_token=<WEBHOOK_SECRET>
 ```
 
-## Структура проекта
+## Project Structure
 
 ```
 teleinv/
 ├── api/
-│   └── index.py           # Основная логика бота
-├── generate_session.py     # Генерация Telethon StringSession
-├── logo.png                # Логотип бота
-├── requirements.txt        # Зависимости Python
-├── vercel.json             # Роутинг Vercel
-├── .gitignore              # Исключения из Git
+│   └── index.py           # Main bot logic
+├── generate_session.py     # Telethon StringSession generator
+├── logo.png                # Bot logo
+├── requirements.txt        # Python dependencies
+├── vercel.json             # Vercel routing
+├── .gitignore              # Git exclusions
 └── README.md
 ```
 
-## Ограничения
+## Limitations
 
-- **QStash free tier** — максимальная задержка 7 дней (604800 сек)
-- **Vercel serverless** — состояние `last_qstash_msg` не сохраняется между инстансами (для надёжной отмены — используй inline-кнопку)
-- **Telethon** — не отправлять слишком часто, чтобы избежать блокировки аккаунта
+- **QStash free tier** — max delay 7 days (604,800 sec)
+- **Vercel serverless** — `last_qstash_msg` state is not persisted across instances (use inline button for reliable cancellation)
+- **Telethon** — avoid sending too frequently to prevent account ban
 
-## Лицензия
+## License
 
 MIT
