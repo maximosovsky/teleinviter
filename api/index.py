@@ -1,8 +1,8 @@
 import telebot
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import urllib.parse
 import os
-import requests
 import json
 import asyncio
 import re
@@ -31,13 +31,32 @@ if ALLOWED_USER_IDS:
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 app = Flask(__name__)
 
-# --- Утилиты безопасности ---
+# --- Утилиты ---
 
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{5,32}$')
+
+# Города с IANA таймзонами (DST-aware)
+CITIES = [
+    ("Riga",        ZoneInfo("Europe/Riga")),
+    ("Tel-Aviv",    ZoneInfo("Asia/Tel_Aviv")),
+    ("Rome",        ZoneInfo("Europe/Rome")),
+    ("Istanbul",    ZoneInfo("Europe/Istanbul")),
+    ("Bishkek",     ZoneInfo("Asia/Bishkek")),
+    ("Beijing",     ZoneInfo("Asia/Shanghai")),
+    ("Los Angeles", ZoneInfo("America/Los_Angeles")),
+]
+
+# Хранилище последнего QStash message ID (в памяти, per-instance)
+last_qstash_msg = {}
 
 def is_valid_username(username):
     """Валидация Telegram username."""
     return bool(USERNAME_RE.match(username))
+
+def parse_usernames(text):
+    """Парсинг нескольких @username из строки. Возвращает список валидных."""
+    raw = [u.lstrip('@').strip() for u in text.split() if u.strip()]
+    return [u for u in raw if is_valid_username(u)]
 
 def is_user_allowed(user_id):
     """Проверка allowlist. Если список пуст — доступ для всех."""
@@ -87,15 +106,24 @@ def webhook():
         ''', 200
 
 # Отправка личного сообщения через Telethon (userbot)
-async def send_userbot_message(username, text):
+async def send_userbot_messages(usernames, text):
+    """Отправка ЛС нескольким пользователям за одно подключение."""
     from telethon import TelegramClient
     from telethon.sessions import StringSession
     client = TelegramClient(StringSession(TELETHON_SESSION), int(TG_API_ID), TG_API_HASH)
     await client.connect()
+    results = {}
     try:
-        await client.send_message(username, text)
+        for username in usernames:
+            try:
+                await client.send_message(username, text)
+                results[username] = True
+            except Exception as e:
+                print(f"Telethon error for user: {e}")
+                results[username] = False
     finally:
         await client.disconnect()
+    return results
 
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
@@ -109,7 +137,7 @@ def reminder_trigger():
         data = request.json
         chat_id = data.get('chat_id')
         zoom = data.get('zoom', '')
-        target_username = data.get('target_username')
+        target_usernames = data.get('target_usernames', [])
         title = data.get('title', 'Встреча')
 
         # Экранирование для HTML
@@ -120,23 +148,26 @@ def reminder_trigger():
             f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{safe_zoom}", 
             parse_mode='HTML', disable_web_page_preview=True)
 
-        # Личное сообщение участнику через userbot
-        if target_username and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
-            # Валидация username
-            if not is_valid_username(target_username):
-                print("Invalid username rejected")
-                return 'OK', 200
-
+        # Личные сообщения участникам через userbot
+        valid_usernames = [u for u in target_usernames if is_valid_username(u)]
+        if valid_usernames and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
             safe_title = escape(title)
             msg = f"👋 Привет! Напоминаю о встрече:\n\n📌 {safe_title}\n🔗 {zoom}\n\n⏰ Через ~40 минут"
             try:
-                asyncio.run(send_userbot_message(target_username, msg))
-                bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{escape(target_username)}")
+                results = asyncio.run(send_userbot_messages(valid_usernames, msg))
+                sent = [u for u, ok in results.items() if ok]
+                failed = [u for u, ok in results.items() if not ok]
+                if sent:
+                    mentions = ", ".join(f"@{escape(u)}" for u in sent)
+                    bot.send_message(chat_id, f"✅ ЛС отправлено: {mentions}", parse_mode='HTML')
+                if failed:
+                    mentions = ", ".join(f"@{escape(u)}" for u in failed)
+                    bot.send_message(chat_id, f"⚠️ Не удалось отправить: {mentions}", parse_mode='HTML')
             except Exception as e:
                 print(f"Telethon error: {e}")
-                bot.send_message(chat_id, f"⚠️ Не удалось отправить личное напоминание")
-        elif target_username:
-            print(f"Telethon not configured, cannot send DM to @{target_username}")
+                bot.send_message(chat_id, "⚠️ Не удалось отправить личные напоминания")
+        elif valid_usernames:
+            print("Telethon not configured, cannot send DMs")
     except Exception as e:
         print(f"Reminder error: {e}")
     return 'OK', 200
@@ -145,7 +176,38 @@ def reminder_trigger():
 def start(message):
     if not is_user_allowed(message.from_user.id):
         return
-    bot.send_message(message.chat.id, "Бот готов! Пришли: <code>Тема, Дата, Время Ist, Ссылка, @username</code>\n(@username — необязательно)", parse_mode='HTML')
+    bot.send_message(message.chat.id,
+        "Бот готов! Пришли:\n"
+        "<code>Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2</code>\n\n"
+        "@username — необязательно (можно несколько через пробел)\n"
+        "/cancel — отменить последнее напоминание",
+        parse_mode='HTML')
+
+@bot.message_handler(commands=['cancel'])
+def cancel_reminder(message):
+    if not is_user_allowed(message.from_user.id):
+        return
+    chat_id = message.chat.id
+    msg_id = last_qstash_msg.get(chat_id)
+    if not msg_id:
+        bot.send_message(chat_id, "❌ Нет активных напоминаний для отмены")
+        return
+    try:
+        conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
+        conn.request("DELETE", f"/v2/messages/{msg_id}", headers={
+            "Authorization": f"Bearer {QSTASH_TOKEN}"
+        })
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+        if 200 <= resp.status < 300:
+            del last_qstash_msg[chat_id]
+            bot.send_message(chat_id, "✅ Напоминание отменено")
+        else:
+            bot.send_message(chat_id, "⚠️ Не удалось отменить (возможно, уже отправлено)")
+    except Exception as e:
+        print(f"Cancel error: {e}")
+        bot.send_message(chat_id, "⚠️ Ошибка при отмене")
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
@@ -156,18 +218,21 @@ def create_meeting(message):
         parts = [p.strip() for p in message.text.split(',')]
         if len(parts) < 4: raise ValueError
         title, date_val, time_val, zoom = parts[:4]
-        target_username = parts[4].lstrip('@') if len(parts) >= 5 else None
+        
+        # Парсинг нескольких @username (через пробел)
+        target_usernames = []
+        if len(parts) >= 5 and parts[4].strip():
+            target_usernames = parse_usernames(parts[4])
+            invalid = [u.lstrip('@').strip() for u in parts[4].split() if u.lstrip('@').strip() and not is_valid_username(u.lstrip('@').strip())]
+            if invalid:
+                bot.send_message(message.chat.id, f"❌ Некорректные @username: {', '.join(invalid)} (допустимы: буквы, цифры, _, длина 5–32)")
+                return
 
-        # Валидация username
-        if target_username and not is_valid_username(target_username):
-            bot.send_message(message.chat.id, "❌ Некорректный @username (допустимы: буквы, цифры, _, длина 5–32)")
-            return
-
-        # Логика времени
+        # Логика времени — Istanbul (DST-aware)
+        ist_tz = ZoneInfo("Europe/Istanbul")
         naive_dt = datetime.strptime(f"{date_val} {time_val}", "%d.%m.%Y %H:%M")
-        ist_tz = timezone(timedelta(hours=3))
         meeting_dt_ist = naive_dt.replace(tzinfo=ist_tz)
-        now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
+        now_ist = datetime.now(ist_tz)
 
         # Форматирование
         months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
@@ -175,13 +240,18 @@ def create_meeting(message):
         date_text = f"{meeting_dt_ist.day} {months[meeting_dt_ist.month-1]} {meeting_dt_ist.year}"
         day_name = days_short[meeting_dt_ist.weekday()]
 
-        # Расчет городов
-        h, m = meeting_dt_ist.hour, meeting_dt_ist.minute
-        def calc_city(offset):
-            nh = (h + offset + 24) % 24
-            return f"{nh:02d}:{m:02d}"
-            
-        cities = f"{calc_city(-1)} Riga;Tel-Aviv / {calc_city(-2)} Rome / {calc_city(3)} Bishkek / {calc_city(5)} Beijing / {calc_city(-11)} Los Angeles"
+        # Расчет городов (DST-aware через zoneinfo)
+        meeting_utc = meeting_dt_ist.astimezone(timezone.utc)
+        city_parts = []
+        for city_name, city_tz in CITIES:
+            city_time = meeting_utc.astimezone(city_tz)
+            city_parts.append(f"{city_time.strftime('%H:%M')} {city_name}")
+        # Группировка: Riga;Tel-Aviv если совпадают
+        if city_parts[0].split()[0] == city_parts[1].split()[0]:
+            merged = f"{city_parts[0]};{CITIES[1][0]}"
+            cities = " / ".join([merged] + city_parts[2:])
+        else:
+            cities = " / ".join(city_parts)
 
         # Ссылка в календарь (1 час)
         m_utc_start = meeting_dt_ist.astimezone(timezone.utc)
@@ -202,6 +272,9 @@ def create_meeting(message):
                f"<code>{cities}</code>\n\n"
                f"<b>ZOOM</b> — {safe_zoom}\n\n"
                f"📲 <a href='{gcal}'>Добавить в календарь</a>")
+        if target_usernames:
+            mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
+            res += f"\n👥 Участники: {mentions}"
 
         bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
 
@@ -226,8 +299,8 @@ def create_meeting(message):
                     if REMINDER_SECRET:
                         qstash_headers["Upstash-Forward-X-Reminder-Secret"] = REMINDER_SECRET
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
-                    if target_username:
-                        payload["target_username"] = target_username
+                    if target_usernames:
+                        payload["target_usernames"] = target_usernames
                     
                     # http.client не нормализует URL (requests ломает https:// в пути)
                     conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
@@ -235,17 +308,24 @@ def create_meeting(message):
                     resp = conn.getresponse()
                     resp_body = resp.read().decode()
                     conn.close()
-                    print(f"QStash path: {qstash_path}")
                     print(f"QStash response: {resp.status} {resp_body}")
                     
                     if 200 <= resp.status < 300:
+                        # Сохраняем messageId для /cancel
+                        try:
+                            qstash_data = json.loads(resp_body)
+                            if 'messageId' in qstash_data:
+                                last_qstash_msg[message.chat.id] = qstash_data['messageId']
+                        except Exception:
+                            pass
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
-                        if target_username:
-                            remind_text += f" (+ напишу @{escape(target_username)})"
+                        if target_usernames:
+                            mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
+                            remind_text += f" (+ напишу {mentions})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
                         bot.send_message(message.chat.id, f"⚠️ QStash {resp.status}: {resp_body[:300]}")
 
     except Exception:
-        bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
+        bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2")
 

@@ -1,4 +1,3 @@
-pyTelegramBotAPI==4.25.0
-flask==3.1.2
-requests==2.32.3
-Telethon==1.38.1
+pyTelegramBotAPI
+flask
+Telethon
