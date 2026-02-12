@@ -12,6 +12,8 @@ Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware
 - **Reminders** — 45 min and 5 min before via QStash (up to 7 days), with meeting title and link. Both reminders send DMs to participants
 - **Cancel reminder** — inline button "❌ Cancel" or `/cancel`
 - **Multiple participants** — up to 5 `@usernames` space-separated, each gets a DM via Telethon
+- **Dynamic allowlist** — manage access via `/adduser`, `/removeuser`, `/users` (stored in Upstash Redis, env fallback)
+- **Admin roles** — only admins (`ADMIN_USER_IDS`) can manage the allowlist; regular users can only create meetings
 - **Security** — webhook secret, allowlist, `/reminder` endpoint protection, input sanitization
 
 ## Usage
@@ -40,6 +42,9 @@ Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @osowski @maxim_osovsky
 |---|---|
 | `/start` | Show format help |
 | `/cancel` | Cancel last reminder |
+| `/adduser <ID>` | Add user to allowlist (admin only) |
+| `/removeuser <ID>` | Remove user from allowlist (admin only) |
+| `/users` | Show allowed users (admin only) |
 
 ## Stack
 
@@ -49,6 +54,7 @@ Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @osowski @maxim_osovsky
 | pyTelegramBotAPI | Telegram Bot API |
 | Telethon | Userbot for direct messages |
 | QStash (Upstash) | Delayed reminders (up to 7 days) |
+| Redis (Upstash) | Dynamic allowlist storage |
 | zoneinfo | DST-aware timezones |
 | Vercel | Deployment |
 
@@ -62,22 +68,22 @@ User → Telegram → Vercel (webhook /)
                       │   Flask + Bot        │
                       └─────────┬──────────┘
                                 │
-                 ┌──────────────┼───────────────┐
-                 │              │               │
-           QStash publish   Card +          Callback
-           (delay Ns)     inline buttons    (cancel)
-                 │                              │
-                 ▼                              ▼
-           /reminder endpoint           QStash DELETE
-                  │                     /v2/messages/{id}
-           ┌──────┴──────┐
-           │  type=main   │  type=urgent
-           │  (45 min)    │  (5 min)
-           ├──────────────┤
-           │              │
-      Reminder +      Reminder +
-      Telethon DM     Telethon DM
-      to participants to participants
+                         is_user_allowed?
+                                │
+          ┌─────────────┬───────┼───────────────┐
+          │             │       │               │
+    Upstash Redis   QStash    Card +        Callback
+    (allowlist)   (delay Ns)  inline btns   (cancel)
+          │         │                          │
+     is_admin?      ▼                          ▼
+          │    /reminder endpoint      QStash DELETE
+          ▼         │                /v2/messages/{id}
+    /adduser   ┌────┴─────┐
+    /removeuser│ main(45m)│ urgent(5m)
+    /users     ├──────────┤
+               │          │
+          Reminder +  Reminder +
+          Telethon DM Telethon DM
 ```
 
 ### Cities & Timezones
@@ -110,7 +116,10 @@ Add to Vercel → Settings → Environment Variables:
 | `TELETHON_SESSION` | StringSession (see below) | For DMs |
 | `WEBHOOK_SECRET` | Secret for Telegram webhook verification | Recommended |
 | `REMINDER_SECRET` | Secret for `/reminder` endpoint protection | Recommended |
-| `ALLOWED_USER_IDS` | Comma-separated Telegram user IDs | Optional |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL | For allowlist |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token | For allowlist |
+| `ADMIN_USER_IDS` | Comma-separated admin Telegram user IDs | Recommended |
+| `ALLOWED_USER_IDS` | Comma-separated Telegram user IDs (env fallback) | Optional |
 
 ### 2. Generate Telethon Session
 
