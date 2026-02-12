@@ -22,6 +22,12 @@ WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 APP_HOST = os.getenv('APP_HOST')
 REMINDER_SECRET = os.getenv('REMINDER_SECRET')
 
+# Администраторы — только они могут управлять allowlist
+ADMIN_USER_IDS = os.getenv('ADMIN_USER_IDS', '')
+ADMIN_USERS = set()
+if ADMIN_USER_IDS:
+    ADMIN_USERS = {int(uid.strip()) for uid in ADMIN_USER_IDS.split(',') if uid.strip()}
+
 # Allowlist: Telegram user IDs (env — резервный)
 ALLOWED_USER_IDS = os.getenv('ALLOWED_USER_IDS', '')
 ALLOWED_USERS_ENV = set()
@@ -96,6 +102,10 @@ def is_user_allowed(user_id):
     if not ALLOWED_USERS_ENV:
         return True
     return user_id in ALLOWED_USERS_ENV
+
+def is_admin(user_id):
+    """Проверка прав админа. Админы указаны в ADMIN_USER_IDS."""
+    return user_id in ADMIN_USERS
 
 def cancel_qstash_message(msg_id):
     """Отменить QStash сообщение по ID. Возвращает True если успешно."""
@@ -266,7 +276,8 @@ def start(message):
 
 @bot.message_handler(commands=['adduser'])
 def add_user(message):
-    if not is_user_allowed(message.from_user.id):
+    if not is_admin(message.from_user.id):
+        bot.send_message(message.chat.id, "⛔ Только для админов")
         return
     if not redis_client:
         bot.send_message(message.chat.id, "⚠️ Redis не настроен")
@@ -284,7 +295,8 @@ def add_user(message):
 
 @bot.message_handler(commands=['removeuser'])
 def remove_user(message):
-    if not is_user_allowed(message.from_user.id):
+    if not is_admin(message.from_user.id):
+        bot.send_message(message.chat.id, "⛔ Только для админов")
         return
     if not redis_client:
         bot.send_message(message.chat.id, "⚠️ Redis не настроен")
@@ -306,7 +318,8 @@ def remove_user(message):
 
 @bot.message_handler(commands=['users'])
 def list_users(message):
-    if not is_user_allowed(message.from_user.id):
+    if not is_admin(message.from_user.id):
+        bot.send_message(message.chat.id, "⛔ Только для админов")
         return
     if not redis_client:
         bot.send_message(message.chat.id, "⚠️ Redis не настроен")
