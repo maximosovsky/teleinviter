@@ -208,7 +208,8 @@ def create_meeting(message):
                 if not APP_HOST:
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
-                    target_url = f"https://{APP_HOST}/reminder"
+                    destination = f"https://{APP_HOST}/reminder"
+                    encoded_dest = urllib.parse.quote(destination, safe='')
                     headers = {
                         "Authorization": f"Bearer {QSTASH_TOKEN}",
                         "Content-Type": "application/json",
@@ -218,7 +219,7 @@ def create_meeting(message):
                     if target_username:
                         payload["target_username"] = target_username
                     resp = requests.post(
-                        f"https://qstash.upstash.io/v2/publish/{target_url}",
+                        f"https://qstash.upstash.io/v2/publish/{encoded_dest}",
                         headers=headers, data=json.dumps(payload), timeout=5
                     )
                     print(f"QStash response: {resp.status_code} {resp.text}")
