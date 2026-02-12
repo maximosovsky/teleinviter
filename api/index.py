@@ -358,21 +358,17 @@ def create_meeting(message):
                         except Exception:
                             pass
                         
-                        # Добавляем кнопку отмены к карточке встречи
-                        if qstash_msg_id:
-                            kb_updated = telebot.types.InlineKeyboardMarkup()
-                            kb_updated.add(telebot.types.InlineKeyboardButton("📲 Добавить в календарь", url=gcal))
-                            kb_updated.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
-                            try:
-                                bot.edit_message_reply_markup(message.chat.id, sent_msg.message_id, reply_markup=kb_updated)
-                            except Exception:
-                                pass
-                        
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_usernames:
                             mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
                             remind_text += f" (+ напишу {mentions})"
-                        bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
+                        
+                        # Кнопка отмены прямо в сообщении-подтверждении
+                        remind_kb = None
+                        if qstash_msg_id:
+                            remind_kb = telebot.types.InlineKeyboardMarkup()
+                            remind_kb.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
+                        bot.send_message(message.chat.id, remind_text, parse_mode='HTML', reply_markup=remind_kb)
                     else:
                         bot.send_message(message.chat.id, f"⚠️ QStash {resp.status}: {resp_body[:300]}")
 
