@@ -64,6 +64,21 @@ def is_user_allowed(user_id):
         return True
     return user_id in ALLOWED_USERS
 
+def cancel_qstash_message(msg_id):
+    """Отменить QStash сообщение по ID. Возвращает True если успешно."""
+    try:
+        conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
+        conn.request("DELETE", f"/v2/messages/{msg_id}", headers={
+            "Authorization": f"Bearer {QSTASH_TOKEN}"
+        })
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+        return 200 <= resp.status < 300
+    except Exception as e:
+        print(f"Cancel error: {e}")
+        return False
+
 # --- Маршруты ---
 
 @app.route('/', methods=['GET', 'POST'])
@@ -192,22 +207,36 @@ def cancel_reminder(message):
     if not msg_id:
         bot.send_message(chat_id, "❌ Нет активных напоминаний для отмены")
         return
-    try:
-        conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
-        conn.request("DELETE", f"/v2/messages/{msg_id}", headers={
-            "Authorization": f"Bearer {QSTASH_TOKEN}"
-        })
-        resp = conn.getresponse()
-        resp.read()
-        conn.close()
-        if 200 <= resp.status < 300:
-            del last_qstash_msg[chat_id]
-            bot.send_message(chat_id, "✅ Напоминание отменено")
-        else:
-            bot.send_message(chat_id, "⚠️ Не удалось отменить (возможно, уже отправлено)")
-    except Exception as e:
-        print(f"Cancel error: {e}")
-        bot.send_message(chat_id, "⚠️ Ошибка при отмене")
+    if cancel_qstash_message(msg_id):
+        del last_qstash_msg[chat_id]
+        bot.send_message(chat_id, "✅ Напоминание отменено")
+    else:
+        bot.send_message(chat_id, "⚠️ Не удалось отменить (возможно, уже отправлено)")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('cancel:'))
+def cancel_callback(call):
+    if not is_user_allowed(call.from_user.id):
+        bot.answer_callback_query(call.id, "⛔ Нет доступа")
+        return
+    qstash_id = call.data.split(':', 1)[1]
+    if cancel_qstash_message(qstash_id):
+        bot.answer_callback_query(call.id, "✅ Напоминание отменено")
+        # Убираем кнопку отмены, оставляем только календарь
+        if call.message and call.message.reply_markup:
+            new_kb = telebot.types.InlineKeyboardMarkup()
+            for row in call.message.reply_markup.keyboard:
+                for btn in row:
+                    if btn.url:  # оставляем URL-кнопки (календарь)
+                        new_kb.add(btn)
+            cancelled_btn = telebot.types.InlineKeyboardButton("✅ Отменено", callback_data="noop")
+            new_kb.add(cancelled_btn)
+            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=new_kb)
+    else:
+        bot.answer_callback_query(call.id, "⚠️ Не удалось отменить")
+
+@bot.callback_query_handler(func=lambda call: call.data == 'noop')
+def noop_callback(call):
+    bot.answer_callback_query(call.id)
 
 @bot.message_handler(func=lambda m: True)
 def create_meeting(message):
@@ -270,13 +299,17 @@ def create_meeting(message):
         res = (f"<b>{safe_title}</b>\n"
                f"⚡️ <b>{date_text}</b> в <b>{day_name}</b> в <b>{time_val} Ist</b>\n"
                f"<code>{cities}</code>\n\n"
-               f"<b>ZOOM</b> — {safe_zoom}\n\n"
-               f"📲 <a href='{gcal}'>Добавить в календарь</a>")
+               f"<b>ZOOM</b> — {safe_zoom}")
         if target_usernames:
             mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
             res += f"\n👥 Участники: {mentions}"
 
-        bot.send_message(message.chat.id, res, parse_mode='HTML', disable_web_page_preview=True)
+        # Inline-кнопки (календарь всегда, отмена добавится после QStash)
+        kb = telebot.types.InlineKeyboardMarkup()
+        kb.add(telebot.types.InlineKeyboardButton("📲 Добавить в календарь", url=gcal))
+
+        sent_msg = bot.send_message(message.chat.id, res, parse_mode='HTML',
+                                    disable_web_page_preview=True, reply_markup=kb)
 
         # Будильник QStash (45 мин до встречи)
         if QSTASH_TOKEN:
@@ -311,13 +344,26 @@ def create_meeting(message):
                     print(f"QStash response: {resp.status} {resp_body}")
                     
                     if 200 <= resp.status < 300:
-                        # Сохраняем messageId для /cancel
+                        # Сохраняем messageId для /cancel и inline-кнопки
+                        qstash_msg_id = None
                         try:
                             qstash_data = json.loads(resp_body)
-                            if 'messageId' in qstash_data:
-                                last_qstash_msg[message.chat.id] = qstash_data['messageId']
+                            qstash_msg_id = qstash_data.get('messageId')
+                            if qstash_msg_id:
+                                last_qstash_msg[message.chat.id] = qstash_msg_id
                         except Exception:
                             pass
+                        
+                        # Добавляем кнопку отмены к карточке встречи
+                        if qstash_msg_id:
+                            kb_updated = telebot.types.InlineKeyboardMarkup()
+                            kb_updated.add(telebot.types.InlineKeyboardButton("📲 Добавить в календарь", url=gcal))
+                            kb_updated.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
+                            try:
+                                bot.edit_message_reply_markup(message.chat.id, sent_msg.message_id, reply_markup=kb_updated)
+                            except Exception:
+                                pass
+                        
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_usernames:
                             mentions = ", ".join(f"@{escape(u)}" for u in target_usernames)
