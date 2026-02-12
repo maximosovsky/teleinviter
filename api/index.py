@@ -20,6 +20,7 @@ TG_API_HASH = os.getenv('TG_API_HASH')
 TELETHON_SESSION = os.getenv('TELETHON_SESSION')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 APP_HOST = os.getenv('APP_HOST')
+REMINDER_SECRET = os.getenv('REMINDER_SECRET')
 
 # Allowlist: Telegram user IDs, которым разрешено создавать встречи
 ALLOWED_USER_IDS = os.getenv('ALLOWED_USER_IDS', '')
@@ -99,6 +100,10 @@ async def send_userbot_message(username, text):
 # Вход для будильника (QStash)
 @app.route('/reminder', methods=['POST'])
 def reminder_trigger():
+    # Проверка секрета — только QStash знает этот токен
+    if REMINDER_SECRET:
+        if request.headers.get('X-Reminder-Secret', '') != REMINDER_SECRET:
+            return 'Forbidden', 403
 
     try:
         data = request.json
@@ -119,7 +124,7 @@ def reminder_trigger():
         if target_username and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
             # Валидация username
             if not is_valid_username(target_username):
-                print(f"Invalid username rejected: {target_username}")
+                print("Invalid username rejected")
                 return 'OK', 200
 
             safe_title = escape(title)
@@ -128,8 +133,8 @@ def reminder_trigger():
                 asyncio.run(send_userbot_message(target_username, msg))
                 bot.send_message(chat_id, f"✅ Личное сообщение отправлено @{escape(target_username)}")
             except Exception as e:
-                print(f"Telethon error for @{target_username}: {e}")
-                bot.send_message(chat_id, f"⚠️ Telethon error: {str(e)[:300]}")
+                print(f"Telethon error: {e}")
+                bot.send_message(chat_id, f"⚠️ Не удалось отправить личное напоминание")
         elif target_username:
             print(f"Telethon not configured, cannot send DM to @{target_username}")
     except Exception as e:
@@ -216,8 +221,10 @@ def create_meeting(message):
                     qstash_headers = {
                         "Authorization": f"Bearer {QSTASH_TOKEN}",
                         "Content-Type": "application/json",
-                        "Upstash-Delay": f"{delay}s"
+                        "Upstash-Delay": f"{delay}s",
                     }
+                    if REMINDER_SECRET:
+                        qstash_headers["Upstash-Forward-X-Reminder-Secret"] = REMINDER_SECRET
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
@@ -242,5 +249,3 @@ def create_meeting(message):
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
 
-# Экспорт для Vercel
-app = app

@@ -1,21 +1,19 @@
 # Python
 __pycache__/
 *.py[cod]
-*.so
+*.pyo
 *.egg-info/
 dist/
 build/
-.venv/
-venv/
-env/
-
-# Telethon sessions
-*.session
+*.egg
 
 # Environment
 .env
-.env.local
-.env.production
+.env.*
+
+# Telethon sessions
+*.session
+*.session-journal
 
 # IDE
 .vscode/
@@ -24,9 +22,11 @@ env/
 *.swo
 
 # OS
-Thumbs.db
-Desktop.ini
 .DS_Store
+Thumbs.db
 
 # Vercel
 .vercel/
+
+# Node (if ever added)
+node_modules/
