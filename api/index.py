@@ -157,10 +157,11 @@ def reminder_trigger():
 
         # Экранирование для HTML
         safe_zoom = escape(zoom)
+        safe_title = escape(title)
 
         # Напоминание в чат бота
         bot.send_message(chat_id, 
-            f"⚡️ На всякий случай, напоминаю,\n<b>ZOOM через 40 минут</b>\n{safe_zoom}", 
+            f"⚡️ Напоминаю: <b>{safe_title}</b>\n<b>ZOOM через 40 минут</b>\n{safe_zoom}", 
             parse_mode='HTML', disable_web_page_preview=True)
 
         # Личные сообщения участникам через userbot
