@@ -167,6 +167,25 @@ def reminder_trigger():
             bot.send_message(chat_id, 
                 f"⚠️ <b>{safe_title}</b> через 5 минут!\n{safe_zoom}", 
                 parse_mode='HTML', disable_web_page_preview=True)
+
+            # Личные сообщения участникам через userbot
+            valid_usernames = [u for u in target_usernames if is_valid_username(u)]
+            if valid_usernames and TELETHON_SESSION and TG_API_ID and TG_API_HASH:
+                msg = f"⚠️ Через 5 минут!\n\n📌 {safe_title}\n🔗 {zoom}"
+                try:
+                    results = asyncio.run(send_userbot_messages(valid_usernames, msg))
+                    sent = [u for u, ok in results.items() if ok]
+                    failed = [u for u, ok in results.items() if not ok]
+                    if sent:
+                        mentions = ", ".join(f"@{escape(u)}" for u in sent)
+                        bot.send_message(chat_id, f"✅ Срочное ЛС отправлено: {mentions}", parse_mode='HTML')
+                    if failed:
+                        mentions = ", ".join(f"@{escape(u)}" for u in failed)
+                        bot.send_message(chat_id, f"⚠️ Не удалось отправить: {mentions}", parse_mode='HTML')
+                except Exception as e:
+                    print(f"Telethon urgent error: {e}")
+                    bot.send_message(chat_id, "⚠️ Не удалось отправить срочные ЛС")
+
             return 'OK', 200
 
         # Основное напоминание за 45 минут
