@@ -6,6 +6,7 @@ import requests
 import json
 import asyncio
 import re
+import http.client
 from html import escape
 from flask import Flask, request
 
@@ -208,9 +209,8 @@ def create_meeting(message):
                 if not APP_HOST:
                     print("APP_HOST not set, skipping QStash reminder")
                 else:
-                    destination = f"https://{APP_HOST}/reminder"
-                    encoded_dest = urllib.parse.quote(destination, safe='')
-                    headers = {
+                    qstash_path = f"/v2/publish/https://{APP_HOST}/reminder"
+                    qstash_headers = {
                         "Authorization": f"Bearer {QSTASH_TOKEN}",
                         "Content-Type": "application/json",
                         "Upstash-Delay": f"{delay}s"
@@ -218,19 +218,22 @@ def create_meeting(message):
                     payload = {"chat_id": message.chat.id, "zoom": zoom, "title": title}
                     if target_username:
                         payload["target_username"] = target_username
-                    resp = requests.post(
-                        f"https://qstash.upstash.io/v2/publish/{encoded_dest}",
-                        headers=headers, data=json.dumps(payload), timeout=5
-                    )
-                    print(f"QStash response: {resp.status_code} {resp.text}")
                     
-                    if resp.ok:
+                    # http.client не нормализует URL (requests ломает https:// в пути)
+                    conn = http.client.HTTPSConnection("qstash.upstash.io", timeout=10)
+                    conn.request("POST", qstash_path, body=json.dumps(payload), headers=qstash_headers)
+                    resp = conn.getresponse()
+                    resp_body = resp.read().decode()
+                    conn.close()
+                    print(f"QStash response: {resp.status} {resp_body}")
+                    
+                    if 200 <= resp.status < 300:
                         remind_text = f"🔔 Напомню в {reminder_time.strftime('%H:%M')} Ist"
                         if target_username:
                             remind_text += f" (+ напишу @{escape(target_username)})"
                         bot.send_message(message.chat.id, remind_text, parse_mode='HTML')
                     else:
-                        bot.send_message(message.chat.id, f"⚠️ QStash {resp.status_code}: {resp.text[:300]}")
+                        bot.send_message(message.chat.id, f"⚠️ QStash {resp.status}: {resp_body[:300]}")
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Zoom-ссылка, @username")
