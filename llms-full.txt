@@ -1,0 +1,118 @@
+# InviterLink Bot — Full Documentation
+
+> Telegram bot for timezone-aware meeting scheduling with reminders & DMs
+
+## Overview
+
+InviterLink Bot is a serverless Telegram bot deployed on Vercel. It creates meeting cards with multi-timezone time conversion for 7 cities (DST-aware via `zoneinfo`), Google Calendar links, scheduled reminders at 45 and 5 minutes before the meeting (via QStash), and personal DM notifications to participants via Telethon userbot.
+
+## Features
+
+- Meeting card with title, date, day of week, and time across timezones
+- DST-aware timezone conversion for Riga, Tel-Aviv, Rome, Istanbul, Bishkek, Beijing, Los Angeles
+- Google Calendar inline button
+- Dual reminders (45 min + 5 min) via Upstash QStash (up to 7 days delay)
+- Personal DMs to up to 5 participants via Telethon
+- Dynamic allowlist stored in Upstash Redis (with env fallback)
+- Admin roles for allowlist management
+- Webhook secret verification, input sanitization
+
+## Usage Format
+
+```
+Title, DD.MM.YYYY, HH:MM, Link, @user1 @user2
+```
+
+Time input is in Istanbul timezone. If Riga and Tel-Aviv match — they merge into one line.
+
+## Commands
+
+- `/start` — show format help
+- `/cancel` — cancel last reminder
+- `/adduser <ID>` — add user to allowlist (admin only)
+- `/removeuser <ID>` — remove user from allowlist (admin only)
+- `/users` — show allowed users (admin only)
+
+## Stack
+
+- Python + Flask — HTTP server (serverless)
+- pyTelegramBotAPI — Telegram Bot API wrapper
+- Telethon — userbot for sending direct messages
+- QStash (Upstash) — delayed reminder scheduling
+- Redis (Upstash) — dynamic allowlist storage
+- zoneinfo — IANA timezone database with DST support
+- Vercel — deployment platform
+
+## Architecture
+
+Single serverless function at `api/index.py` (Flask app).
+
+Flow: User → Telegram → Vercel webhook → Flask route → allowlist check (Redis/env) → meeting card + QStash scheduling → /reminder endpoint → DMs via Telethon.
+
+Key functions:
+- `webhook()` — main entry point, processes Telegram updates
+- `create_meeting(message)` — parses input, builds card, schedules reminders
+- `reminder_trigger()` — QStash callback endpoint, sends reminder + DMs
+- `send_userbot_messages(usernames, text)` — Telethon async DM sender
+- `is_user_allowed(user_id)` — Redis → env fallback allowlist check
+- `cancel_qstash_message(msg_id)` — cancels a scheduled QStash message
+
+## Cities & Timezones
+
+| City | IANA Zone |
+|---|---|
+| Riga | Europe/Riga |
+| Tel-Aviv | Asia/Tel_Aviv |
+| Rome | Europe/Rome |
+| Istanbul | Europe/Istanbul |
+| Bishkek | Asia/Bishkek |
+| Beijing | Asia/Shanghai |
+| Los Angeles | America/Los_Angeles |
+
+## Environment Variables
+
+| Variable | Description | Required |
+|---|---|---|
+| BOT_TOKEN | Bot token from @BotFather | Yes |
+| QSTASH_TOKEN | Upstash QStash token | Yes |
+| APP_HOST | Vercel domain | Yes |
+| TG_API_ID | Telegram API ID | For DMs |
+| TG_API_HASH | Telegram API Hash | For DMs |
+| TELETHON_SESSION | StringSession string | For DMs |
+| WEBHOOK_SECRET | Telegram webhook secret | Recommended |
+| REMINDER_SECRET | /reminder endpoint secret | Recommended |
+| UPSTASH_REDIS_REST_URL | Redis REST URL | For allowlist |
+| UPSTASH_REDIS_REST_TOKEN | Redis REST token | For allowlist |
+| ADMIN_USER_IDS | Comma-separated admin IDs | Recommended |
+| ALLOWED_USER_IDS | Comma-separated user IDs (env fallback) | Optional |
+
+## Project Structure
+
+```
+teleinv/
+├── api/
+│   └── index.py           # Main bot logic (527 lines)
+├── generate_session.py     # Telethon StringSession generator
+├── logo.png                # Bot logo
+├── requirements.txt        # Python dependencies
+├── vercel.json             # Vercel routing
+├── .gitignore
+├── llms.txt                # LLM-readable project summary
+├── llms-full.txt           # LLM-readable full documentation
+└── README.md
+```
+
+## Limitations
+
+- QStash free tier: max delay 7 days (604,800 sec)
+- Vercel serverless: `last_qstash_msg` state is not persisted across instances
+- Telethon: avoid frequent sends to prevent account ban
+
+## License
+
+MIT. Author: Maxim Osovsky.
+
+## Links
+
+- Repository: https://github.com/maximosovsky/teleinviter
+- Telegram: https://t.me/inviterLinkBot

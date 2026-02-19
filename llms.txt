@@ -1,0 +1,20 @@
+# InviterLink Bot
+
+> Telegram bot for timezone-aware meeting scheduling with reminders & DMs
+
+## Overview
+
+InviterLink Bot creates meeting cards with multi-timezone time conversion (7 cities, DST-aware), Google Calendar links, scheduled reminders (45 min and 5 min before), and personal DMs to participants via Telethon.
+
+## Stack
+
+- Python + Flask (serverless on Vercel)
+- pyTelegramBotAPI (Telegram Bot API)
+- Telethon (userbot for DMs)
+- QStash / Redis (Upstash) — reminders & allowlist
+- zoneinfo — DST-aware timezone conversion
+
+## Docs
+
+- [README](https://github.com/maximosovsky/teleinviter#readme)
+- [llms-full.txt](https://github.com/maximosovsky/teleinviter/blob/main/llms-full.txt)

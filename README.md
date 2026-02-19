@@ -1,14 +1,28 @@
-# 🗓 InviterLink Bot
+<div align="center">
+  <img src="logo.png" alt="InviterLink Bot" width="120"/>
+  <h1>🗓 InviterLink Bot</h1>
+  <p>Telegram bot for timezone-aware meeting scheduling with reminders & DMs</p>
 
-Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware time conversion, Google Calendar link, reminders at 45 and 5 minutes before, and personal messages to participants.
+  ![License](https://img.shields.io/github/license/maximosovsky/teleinviter)
+  ![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)
+  ![Vercel](https://img.shields.io/badge/deploy-Vercel-black?logo=vercel)
+  ![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)
 
-![logo](logo.png)
+  🤖 [Telegram: @inviterLinkBot](https://t.me/inviterLinkBot)
 
-🤖 [Telegram: @inviterLinkBot](https://t.me/inviterLinkBot)
+  [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/maximosovsky/teleinviter)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/maximosovsky/teleinviter)
+  [Quick Start](#-usage) · [Features](#-features) · [Deploy](#-deploy-to-vercel) · [Stack](#-stack)
+</div>
 
-## Features
+---
+
+> **One message → meeting card with timezone conversion, calendar link, and personal reminders.**
+> Send the bot a title, date, time, and link — it builds a rich card for 7 cities, schedules DM reminders via QStash, and adds a Google Calendar button.
+
+---
+
+## ✨ Features
 
 - **Meeting card** — title, date, day of week, time
 - **DST-aware timezones** — auto-conversion for 7 cities via `zoneinfo` (IANA)
@@ -20,7 +34,9 @@ Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware
 - **Admin roles** — only admins (`ADMIN_USER_IDS`) can manage the allowlist; regular users can only create meetings
 - **Security** — webhook secret, allowlist, `/reminder` endpoint protection, input sanitization
 
-## Usage
+---
+
+## 🚀 Usage
 
 Send the bot a message in this format:
 
@@ -50,7 +66,9 @@ Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @osowski @maxim_osovsky
 | `/removeuser <ID>` | Remove user from allowlist (admin only) |
 | `/users` | Show allowed users (admin only) |
 
-## Stack
+---
+
+## 🏗 Stack
 
 | Technology | Role |
 |---|---|
@@ -62,7 +80,24 @@ Standup, 13.02.2026, 20:00, https://zoom.us/j/789, @osowski @maxim_osovsky
 | zoneinfo | DST-aware timezones |
 | Vercel | Deployment |
 
-## Architecture
+```
+teleinv/
+├── api/
+│   └── index.py           # Main bot logic
+├── generate_session.py     # Telethon StringSession generator
+├── logo.png                # Bot logo
+├── requirements.txt        # Python dependencies
+├── vercel.json             # Vercel routing
+├── .gitignore              # Git exclusions
+└── README.md
+```
+
+---
+
+## 🔧 Architecture
+
+<details>
+<summary>Click to expand</summary>
 
 ```
 User → Telegram → Vercel (webhook /)
@@ -104,9 +139,14 @@ User → Telegram → Vercel (webhook /)
 
 Time input is in Istanbul (IST). If Riga and Tel-Aviv match — they merge: `19:00 Riga;Tel-Aviv`.
 
-## Deploy to Vercel
+</details>
 
-### 1. Environment Variables
+---
+
+## 🚀 Deploy to Vercel
+
+<details>
+<summary>1. Environment Variables</summary>
 
 Add to Vercel → Settings → Environment Variables:
 
@@ -125,7 +165,10 @@ Add to Vercel → Settings → Environment Variables:
 | `ADMIN_USER_IDS` | Comma-separated admin Telegram user IDs | Recommended |
 | `ALLOWED_USER_IDS` | Comma-separated Telegram user IDs (env fallback) | Optional |
 
-### 2. Generate Telethon Session
+</details>
+
+<details>
+<summary>2. Generate Telethon Session</summary>
 
 ```bash
 pip install telethon
@@ -134,7 +177,10 @@ python generate_session.py
 
 The script will ask for `API_ID` and `API_HASH`, authorize your account, and output a session string. Copy it to the `TELETHON_SESSION` variable.
 
-### 3. Set Webhook
+</details>
+
+<details>
+<summary>3. Set Webhook</summary>
 
 After deploying to Vercel, set the webhook:
 
@@ -142,19 +188,9 @@ After deploying to Vercel, set the webhook:
 https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<your-domain>.vercel.app/&secret_token=<WEBHOOK_SECRET>
 ```
 
-## Project Structure
+</details>
 
-```
-teleinv/
-├── api/
-│   └── index.py           # Main bot logic
-├── generate_session.py     # Telethon StringSession generator
-├── logo.png                # Bot logo
-├── requirements.txt        # Python dependencies
-├── vercel.json             # Vercel routing
-├── .gitignore              # Git exclusions
-└── README.md
-```
+---
 
 ## 🌐 Use Cases
 
@@ -162,16 +198,20 @@ teleinv/
 - Auto-remind participants via DM
 - One-click Google Calendar integration
 
-## Limitations
+---
+
+## ⚠️ Limitations
 
 - **QStash free tier** — max delay 7 days (604,800 sec)
 - **Vercel serverless** — `last_qstash_msg` state is not persisted across instances (use inline button for reliable cancellation)
 - **Telethon** — avoid sending too frequently to prevent account ban
 
+---
+
 ## 🤝 Contributing
 
 Feedback and PRs are welcome! Feel free to open issues.
 
-## License
+## 📄 License
 
-MIT
+[Maxim Osovsky](https://www.linkedin.com/in/osovsky/). Licensed under MIT.
