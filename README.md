@@ -3,14 +3,10 @@
   <h1>🗓 InviterLink Bot</h1>
   <p>Telegram bot for timezone-aware meeting scheduling with reminders & DMs</p>
 
-  ![License](https://img.shields.io/github/license/maximosovsky/teleinviter)
+  ![License](https://img.shields.io/badge/license-CC%20BY--SA%204.0-green)
   ![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)
   ![Vercel](https://img.shields.io/badge/deploy-Vercel-black?logo=vercel)
-  ![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)
-
-  🤖 [Telegram: @inviterLinkBot](https://t.me/inviterLinkBot)
-
-  [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/maximosovsky/teleinviter)
+  [![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot%20API-26A5E4?logo=telegram&logoColor=white)](https://t.me/inviterLinkBot)
 
   [Quick Start](#-usage) · [Features](#-features) · [Deploy](#-deploy-to-vercel) · [Stack](#-stack)
 </div>
@@ -214,4 +210,4 @@ Feedback and PRs are welcome! Feel free to open issues.
 
 ## 📄 License
 
-[Maxim Osovsky](https://www.linkedin.com/in/osovsky/). Licensed under MIT.
+[Maxim Osovsky](https://www.linkedin.com/in/osovsky/). Licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).

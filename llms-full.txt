@@ -110,7 +110,7 @@ teleinv/
 
 ## License
 
-MIT. Author: Maxim Osovsky.
+CC BY-SA 4.0. Author: Maxim Osovsky.
 
 ## Links
 
