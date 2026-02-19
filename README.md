@@ -4,6 +4,10 @@ Telegram bot for scheduling meetings. Creates a meeting card with timezone-aware
 
 ![logo](logo.png)
 
+🤖 [Telegram: @inviterLinkBot](https://t.me/inviterLinkBot)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/maximosovsky/teleinviter)
+
 ## Features
 
 - **Meeting card** — title, date, day of week, time
@@ -152,11 +156,21 @@ teleinv/
 └── README.md
 ```
 
+## 🌐 Use Cases
+
+- Schedule multi-timezone team calls
+- Auto-remind participants via DM
+- One-click Google Calendar integration
+
 ## Limitations
 
 - **QStash free tier** — max delay 7 days (604,800 sec)
 - **Vercel serverless** — `last_qstash_msg` state is not persisted across instances (use inline button for reliable cancellation)
 - **Telethon** — avoid sending too frequently to prevent account ban
+
+## 🤝 Contributing
+
+Feedback and PRs are welcome! Feel free to open issues.
 
 ## License
 
