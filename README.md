@@ -18,6 +18,18 @@
 
 ---
 
+## 💡 Why InviterLink?
+
+| Feature | InviterLink | Reminder bots | Calendar bots | Cal.com |
+|---|:---:|:---:|:---:|:---:|
+| Multi-timezone card (7 cities) | ✅ | ❌ | ❌ | ❌ |
+| Personal DMs via Telethon | ✅ | ❌ | ❌ | ❌ |
+| Dual reminders (45 min + 5 min) | ✅ | ⚠️ single | ❌ | ✅ |
+| Google Calendar one-click | ✅ | ❌ | ✅ | ✅ |
+| Serverless & free (Vercel) | ✅ | ⚠️ VPS | ⚠️ VPS | ❌ paid |
+
+---
+
 ## ✨ Features
 
 - **Meeting card** — title, date, day of week, time
