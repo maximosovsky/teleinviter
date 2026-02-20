@@ -208,11 +208,64 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<your-domain>.ver
 
 ---
 
-## ⚠️ Limitations
+## ⚠️ Limitations & Quotas
 
-- **QStash free tier** — max delay 7 days (604,800 sec)
+<details>
+<summary>Click to expand</summary>
+
+### QStash (Upstash) — Free tier
+
+| Limit | Value |
+|---|---|
+| Max delay | 7 days (604,800 sec) |
+| Messages/day | 500 |
+| Messages/sec | 50 |
+| Retries on failure | 3 |
+
+🔗 Check usage: [console.upstash.com](https://console.upstash.com/) → QStash → Usage
+
+### Redis (Upstash) — Free tier
+
+| Limit | Value |
+|---|---|
+| Commands/day | 10,000 |
+| DB size | 256 MB |
+| Max connections | 1,000 |
+
+🔗 Check usage: [console.upstash.com](https://console.upstash.com/) → Redis → Usage
+
+### Vercel — Free tier (Hobby)
+
+| Limit | Value |
+|---|---|
+| Serverless invocations | 100,000/month |
+| Function timeout | 10 sec |
+| Bandwidth | 100 GB/month |
+
+🔗 Check usage: [vercel.com/dashboard](https://vercel.com/dashboard) → Usage
+
+### Telethon (Userbot)
+
+| Limit | Value |
+|---|---|
+| DMs to strangers | ~20–50/day (Telegram flood ban) |
+| Session lifetime | Permanent until revoked |
+
+⚠️ `FloodWaitError` = sending too fast. Session can be revoked at [my.telegram.org](https://my.telegram.org/)
+
+### Telegram Bot API
+
+| Limit | Value |
+|---|---|
+| `callback_data` size | 64 bytes |
+| Messages/sec per chat | 1 (global: 30/sec) |
+| Inline buttons per row | 8 |
+
+### Other
+
 - **Vercel serverless** — `last_qstash_msg` state is not persisted across instances (use inline button for reliable cancellation)
-- **Telethon** — avoid sending too frequently to prevent account ban
+
+</details>
 
 ---
 
