@@ -140,6 +140,18 @@ def webhook():
         try:
             json_string = request.get_data().decode('utf-8')
             update = telebot.types.Update.de_json(json_string)
+
+            # Deduplication: skip retried webhooks (Telegram retries on 500/timeout)
+            if redis_client and update.update_id:
+                dedup_key = f"upd:{update.update_id}"
+                try:
+                    if redis_client.get(dedup_key):
+                        print(f"Skipping duplicate update {update.update_id}")
+                        return 'OK', 200
+                    redis_client.set(dedup_key, "1", ex=60)
+                except Exception as e:
+                    print(f"Redis dedup error (non-fatal): {e}")
+
             bot.process_new_updates([update])
             return 'OK', 200
         except Exception as e:
@@ -169,19 +181,31 @@ def webhook():
 
 # Отправка личного сообщения через Telethon (userbot)
 async def send_userbot_messages(usernames, text):
-    """Отправка ЛС нескольким пользователям за одно подключение."""
+    """Отправка ЛС нескольким пользователям за одно подключение.
+    Rate-limited: 1.5s delay between sends, stops on FloodWaitError."""
     from telethon import TelegramClient
+    from telethon.errors import FloodWaitError
     from telethon.sessions import StringSession
     client = TelegramClient(StringSession(TELETHON_SESSION), int(TG_API_ID), TG_API_HASH)
     await client.connect()
     results = {}
     try:
-        for username in usernames:
+        for i, username in enumerate(usernames):
             try:
                 await client.send_message(username, text)
                 results[username] = True
+                # Rate limiting: pause between sends to avoid flood ban
+                if i < len(usernames) - 1:
+                    await asyncio.sleep(1.5)
+            except FloodWaitError as e:
+                print(f"Telethon FloodWait: {e.seconds}s — stopping DMs")
+                results[username] = False
+                # Mark remaining users as failed
+                for remaining in usernames[i + 1:]:
+                    results[remaining] = False
+                break
             except Exception as e:
-                print(f"Telethon error for user: {e}")
+                print(f"Telethon error for @{username}: {e}")
                 results[username] = False
     finally:
         await client.disconnect()
