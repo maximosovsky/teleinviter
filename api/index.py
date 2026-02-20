@@ -65,6 +65,10 @@ CITIES = [
 # Хранилище последнего QStash message ID (в памяти, per-instance)
 last_qstash_msg = {}
 
+# Маппинг коротких ID → полных QStash messageId (для callback_data ≤64 bytes)
+qstash_id_map = {}
+qstash_id_counter = 0
+
 def is_valid_username(username):
     """Валидация Telegram username."""
     return bool(USERNAME_RE.match(username))
@@ -359,7 +363,8 @@ def cancel_callback(call):
     if not is_user_allowed(call.from_user.id):
         bot.answer_callback_query(call.id, "⛔ Нет доступа")
         return
-    qstash_id = call.data.split(':', 1)[1]
+    short_key = call.data.split(':', 1)[1]
+    qstash_id = qstash_id_map.get(short_key, short_key)  # fallback to raw value
     if cancel_qstash_message(qstash_id):
         bot.answer_callback_query(call.id, "✅ Напоминание отменено")
         # Убираем кнопку отмены, оставляем только календарь
@@ -507,9 +512,17 @@ def create_meeting(message):
                         
                         remind_kb = None
                         if qstash_msg_id:
+                            global qstash_id_counter
+                            qstash_id_counter += 1
+                            short_key = str(qstash_id_counter)
+                            qstash_id_map[short_key] = qstash_msg_id
                             remind_kb = telebot.types.InlineKeyboardMarkup()
-                            remind_kb.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{qstash_msg_id}"))
-                        bot.send_message(message.chat.id, remind_text, parse_mode='HTML', reply_markup=remind_kb)
+                            remind_kb.add(telebot.types.InlineKeyboardButton("❌ Отменить напоминание", callback_data=f"cancel:{short_key}"))
+                        try:
+                            bot.send_message(message.chat.id, remind_text, parse_mode='HTML', reply_markup=remind_kb)
+                        except Exception as btn_err:
+                            print(f"Cancel button error: {btn_err}")
+                            bot.send_message(message.chat.id, remind_text + "\n(Отменить: /cancel)", parse_mode='HTML')
                     else:
                         bot.send_message(message.chat.id, f"⚠️ QStash {status}: {body[:300]}")
 
