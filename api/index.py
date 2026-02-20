@@ -519,7 +519,7 @@ def create_meeting(message):
                     publish_qstash(delay_5, {"type": "urgent"})
         except Exception as e:
             print(f"QStash error: {e}")
-            bot.send_message(message.chat.id, "⚠️ Не удалось установить напоминание")
+            bot.send_message(message.chat.id, f"⚠️ Не удалось установить напоминание\n<code>{escape(str(e))}</code>", parse_mode='HTML')
 
     except Exception:
         bot.send_message(message.chat.id, "❌ Ошибка формата! Пришли: Тема, ДД.ММ.ГГГГ, ЧЧ:ММ, Ссылка, @user1 @user2")
