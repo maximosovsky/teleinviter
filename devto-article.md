@@ -3,7 +3,7 @@ title: I Built a Telegram Bot That Solves the "What Time Is It For You?" Problem
 published: false
 description: A serverless Telegram bot that converts one message into a timezone-aware meeting card with Google Calendar link and personal DM reminders.
 tags: telegram, python, serverless, opensource
-cover_image: https://raw.githubusercontent.com/maximosovsky/teleinviter/master/cover.jpg
+cover_image: https://raw.githubusercontent.com/maximosovsky/teleinviter/main/inviter-link-cover.jpg
 ---
 
 "Can we do 6 PM your time? Wait, what time zone are you in again?"
