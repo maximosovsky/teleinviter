@@ -3,7 +3,7 @@ title: I Built a Telegram Bot That Solves the "What Time Is It For You?" Problem
 published: false
 description: A serverless Telegram bot that converts one message into a timezone-aware meeting card with Google Calendar link and personal DM reminders.
 tags: telegram, python, serverless, opensource
-cover_image: https://raw.githubusercontent.com/maximosovsky/teleinviter/main/inviter-link-cover.jpg
+cover_image: https://raw.githubusercontent.com/maximosovsky/teleinviter/main/TeleInviter-cover.jpg
 ---
 
 "Can we do 6 PM your time? Wait, what time zone are you in again?"
@@ -126,7 +126,7 @@ The bot has ~10 features (timezones, reminders, DMs, calendar, allowlist, admin 
 
 **2. Free tiers are surprisingly generous.**
 
-After months of usage: 37 QStash messages total, 16 Redis commands, 0 bandwidth. The free tier limits (1,000 QStash messages/day, 500K Redis commands/month) are absurd overkill for a personal tool.
+After 2 weeks of usage: 37 QStash messages total, 16 Redis commands, 0 bandwidth. The free tier limits (1,000 QStash messages/day, 500K Redis commands/month) are absurd overkill for a personal tool.
 
 **3. The Telethon trade-off is real.**
 
